@@ -300,5 +300,7 @@ set_tests_properties(m17-aim-live PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 90)
 # screen they draw is the milestone evidence.
 add_test(NAME m17-aim-ui
          COMMAND ${CMAKE_SOURCE_DIR}/scripts/m17-shot.sh)
+# Screenshots go to the build dir here: the test must not rewrite the tracked
+# evidence files on every run.
 set_tests_properties(m17-aim-ui PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 240
-                     ENVIRONMENT "RC_TEST_HOST=${RC_TEST_HOST};RC_TEST_SSH_PORT=${RC_TEST_SSH_PORT}")
+                     ENVIRONMENT "RC_TEST_HOST=${RC_TEST_HOST};RC_TEST_SSH_PORT=${RC_TEST_SSH_PORT};OUT_MAP=${CMAKE_BINARY_DIR}/m17-map.png;OUT_AIM=${CMAKE_BINARY_DIR}/m17-aimview.png")
