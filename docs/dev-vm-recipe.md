@@ -115,7 +115,9 @@ A second call carrying that token returns board data:
 With the VM up (`scripts/dev-vm.sh`):
 
     cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
-    ctest --test-dir build --output-on-failure     # connect-smoke: login + system.board
+    ctest --test-dir build --output-on-failure
+    # connect-smoke: login + system.board
+    # interfaces-traffic: per-interface counters grow over 6 one-second samples
 
 `build/tests/connect-smoke` prints the typed board fields and exits 0 only when
 the session and `system.board` both succeed:
@@ -129,13 +131,36 @@ the session and `system.board` both succeed:
 
 The Qt window itself is checked with `scripts/gui-check.sh`, which runs the
 client on a headless Xvfb, connects, and writes a screenshot
-(`docs/evidence/m1-connect-window.png`). The certificate trust prompt is
-captured the same way with `EXTRA_ARGS="" WAIT=5` after deleting
-`~/.config/open-broadcast/router-console.conf`.
+(`docs/evidence/m1-connect-window.png`). The Interfaces view uses the same
+approach via `scripts/interfaces-check.sh` (opens the graph window for `lan`,
+pushes traffic, captures the tree and two graph frames 4 s apart:
+`docs/evidence/m2-interfaces-view.png`, `docs/evidence/m2-interface-graph.png`).
+The certificate trust prompt is captured the same way with `EXTRA_ARGS="" WAIT=5`
+after deleting `~/.config/open-broadcast/router-console.conf`.
 
 ## Traffic generator for graph checks
 
-iperf3 in the VM (`apk add iperf3`) or from the host through the forwarded port.
+`iperf3` is **not** in the base image and `apk add iperf3` is not needed: the
+graph check only needs bytes on an interface, and the guest's own ssh forward
+delivers them. `tests/interfaces-traffic` runs
+
+    ssh -o BatchMode=yes -p 10022 root@127.0.0.1 cat /dev/zero > /dev/null
+
+from the host, so the stream enters eth0/br-lan inside the guest and its
+counters grow at line rate (measured ~175 MB/s TX, ~5 MB/s RX of TCP ACKs on
+`br-lan`). Batch mode means a missing host key in
+`/etc/dropbear/authorized_keys` fails fast instead of prompting; pass
+`--traffic-cmd <program>` to use something else. `iperf3` remains an option when
+a specific flow shape is wanted.
+
+Second VM next to the shared one: the host forwards are per-process, so a second
+worktree needs different host ports or it collides with the first VM:
+
+    FWD_SSH=20022 FWD_HTTP=20080 FWD_HTTPS=20443 scripts/dev-vm.sh
+
+then `ctest` alternatives run with `--host 127.0.0.1:20443 --ssh-port 20022`.
+Each worktree needs its own `.vm/` (copy it from the main checkout; two VMs must
+never share a qcow2).
 
 ## Custom packages
 
