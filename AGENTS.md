@@ -24,7 +24,13 @@ the star outranks anything you infer.
    decision recorded in docs/ when made.
 7. Thread-safe UI: all network I/O off the UI thread; QML receives state via
    models/properties, never direct widget pokes from worker threads.
-8. Verify before claiming: run the build, run the smoke curl against the VM,
+8. The dev VM is a single shared instance whose disk lives in the MAIN checkout's
+   `.vm/` (untracked). Never copy it into a worktree and never `git worktree
+   remove` a checkout while its `.vm` is in use: qemu keeps running on the
+   unlinked inode and the state dies with it (this happened once). To run a
+   second VM, use FWD_* port overrides in a copy created explicitly for that
+   run, and merge nothing back but code.
+9. Verify before claiming: run the build, run the smoke curl against the VM,
    paste real output into the north-star evidence file:
 
        python3 ~/.hermes/skills/software-development/north-star/scripts/north_star.py evidence router-console --add "..."
