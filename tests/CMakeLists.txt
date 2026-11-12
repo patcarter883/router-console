@@ -217,3 +217,17 @@ add_test(NAME m12-config-backup
          COMMAND m12-config-backup --host ${RC_TEST_HOST} --user root --password root
                  --accept-new-cert)
 set_tests_properties(m12-config-backup PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 120)
+# --- Milestone 13: routing ---------------------------------------------------
+# One check per routing surface. Each needs an FRR-enabled router (frr, ospf,
+# bgpd, staticd installed; bgpd/ospfd=yes in /etc/frr/daemons), so a VM without
+# the packages skips on the first assertion instead of pretending.
+add_executable(routing-views routing_views.cpp)
+target_link_libraries(routing-views PRIVATE router-console-core)
+
+foreach(mode routes ospf bgp config)
+    # Host/user come from vm_fixture defaults, overridable with RC_VM_HOST /
+    # RC_VM_USER / RC_VM_PASS so one lab copy can be tested on another port.
+    add_test(NAME routing-${mode}
+             COMMAND routing-views --mode ${mode} --accept-new-cert)
+    set_tests_properties(routing-${mode} PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 180)
+endforeach()

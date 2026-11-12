@@ -69,7 +69,7 @@ Window {
             spacing: 14
 
             Label {
-                text: win.editor ? "/etc/config/" + win.editor.config : ""
+                text: win.editor ? win.editor.sourceLabel : ""
                 color: "#8c8c8c"
                 font.pixelSize: 12
             }

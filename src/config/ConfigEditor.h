@@ -10,6 +10,7 @@
 
 #include "ConfigModels.h"
 #include "DomainRegistry.h"
+#include "protocol/RoutingTypes.h"
 #include "protocol/UbusTypes.h"
 
 class UbusClient;
@@ -18,6 +19,11 @@ class UbusClient;
 // the exact staged differences and commits them with uci set -> apply ->
 // confirm. Nothing reaches the router until apply(); revert() discards both the
 // local staging and anything staged on the router for the package.
+//
+// A Kind::FrrConfig domain runs the same staged-diff model over the frr.conf
+// document: apply writes the file, keeps `<path>.bak` and restarts frr; there is
+// no UCI apply/confirm, so revert() discards local staging and, when an apply
+// already reached the router, restores the backup file and restarts again.
 //
 // Lives on the UI thread; every router call is queued onto the ubus client's
 // thread and comes back as a typed result.
@@ -28,6 +34,7 @@ class ConfigEditor : public QObject
     Q_PROPERTY(QString domainId READ domainId CONSTANT)
     Q_PROPERTY(QString title READ title CONSTANT)
     Q_PROPERTY(QString config READ config CONSTANT)
+    Q_PROPERTY(QString sourceLabel READ sourceLabel CONSTANT)
     Q_PROPERTY(bool loaded READ isLoaded NOTIFY stateChanged)
     Q_PROPERTY(bool busy READ isBusy NOTIFY stateChanged)
     Q_PROPERTY(QString statusText READ statusText NOTIFY stateChanged)
@@ -44,6 +51,7 @@ public:
     QString domainId() const { return m_spec.id; }
     QString title() const { return m_spec.title; }
     QString config() const { return m_spec.config; }
+    QString sourceLabel() const { return m_spec.sourceLabel(); }
     bool isLoaded() const { return m_loaded; }
     bool isBusy() const { return m_busy; }
     QString statusText() const { return m_status; }
@@ -78,14 +86,24 @@ private:
     void onReverted(const QString &config);
     void onRevertFailed(const Ubus::Error &error);
     void onInterfacesReceived(const QList<Ubus::InterfaceInfo> &interfaces);
+    void onFrrConfigReceived(const QString &path, const QString &text);
+    void onFrrConfigFailed(const Ubus::Error &error);
+    void onFrrApplied(const QString &path, const Routing::FrrApplyResult &result);
+    void onFrrApplyFailed(const Ubus::Error &error);
+    void onFrrProgress(const QString &stage);
 
     void readNextSectionType();
     void applyRead(const Ubus::UciConfig &config);
+    void applyFrrRead(const QString &text);
     void rebuildFields();
     void rebuildPending();
+    void rebuildFrrFields();
+    void rebuildFrrPending();
     void setBusy(bool busy, const QString &status);
     void setError(const QString &error);
     const Ubus::UciSection *currentUciSection() const;
+    const Routing::FrrBlock *currentFrrBlock() const;
+    QString frrCommittedValue(const Routing::FrrBlock &block, const QString &keyword) const;
     QString effectiveValue(const Ubus::UciSection &section, const QString &option) const;
     QStringList zoneNames() const;
     QString chainFor(const Ubus::UciSection &section) const;
@@ -104,6 +122,14 @@ private:
     bool m_collecting = false;
     // Live names for InterfaceRef fields: interface names and their devices.
     QStringList m_interfaceNames;
+
+    // frr.conf document for Kind::FrrConfig domains.
+    Routing::FrrConfig m_frr;
+    // True once an apply reached the router in this session, so revert() knows
+    // there is a backup worth restoring.
+    bool m_frrApplied = false;
+    // The pending frrApply is a backup restore, not an apply.
+    bool m_frrRestoring = false;
 
     ConfigSectionsModel m_sections;
     ConfigFieldsModel m_fields;

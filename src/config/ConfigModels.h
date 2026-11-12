@@ -8,6 +8,7 @@
 #include <QStringList>
 
 #include "DomainRegistry.h"
+#include "protocol/RoutingTypes.h"
 #include "protocol/UbusTypes.h"
 
 // View models for the config editor. They hold no state of their own beyond the
@@ -49,6 +50,7 @@ public:
         NameRole = Qt::UserRole + 1,
         TypeRole,
         SummaryRole,
+        DetailRole,
     };
 
     explicit ConfigSectionsModel(QObject *parent = nullptr);
@@ -58,6 +60,9 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     void setSections(const QList<Ubus::UciSection> &sections, const Config::DomainSpec &spec);
+    // frr.conf blocks: the row name is the block index (what selectSection
+    // takes), the detail is the block header.
+    void setFrrBlocks(const QList<Routing::FrrBlock> &blocks);
     Q_INVOKABLE int rowFor(const QString &name) const;
 
 private:
@@ -65,7 +70,10 @@ private:
         QString name;
         QString type;
         QString summary;
+        QString detail;
     };
+
+    void setRows(const QList<Row> &rows);
 
     QList<Row> m_rows;
 };

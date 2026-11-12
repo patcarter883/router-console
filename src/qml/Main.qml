@@ -24,6 +24,14 @@ ApplicationWindow {
     property var interfaceWindows: []
     property var configWindows: []
     property var pluginWindows: []
+    property bool routingExpanded: true
+    property bool startupRoutingOpened: false
+    property var routingWindows: []
+    readonly property var routingViews: [
+        { id: "routes", title: qsTr("Routes") },
+        { id: "ospf", title: qsTr("OSPF") },
+        { id: "bgp", title: qsTr("BGP") }
+    ]
     property bool toolsExpanded: true
     property bool startupToolOpened: false
     property var toolWindows: []
@@ -44,6 +52,8 @@ ApplicationWindow {
         typeof startupConfigDomain === "undefined" ? "" : startupConfigDomain
     readonly property string startupConfigSectionName:
         typeof startupConfigSection === "undefined" ? "" : startupConfigSection
+    readonly property string startupRouting:
+        typeof startupRoutingId === "undefined" ? "" : startupRoutingId
     readonly property string startupTool:
         typeof startupToolId === "undefined" ? "" : startupToolId
     readonly property string startupStage:
@@ -151,6 +161,47 @@ ApplicationWindow {
         })
         return window
     }
+
+    // One window per routing view; reopening focuses the existing one.
+    function openRouting(viewId) {
+        for (let i = 0; i < routingWindows.length; ++i) {
+            if (routingWindows[i].viewId === viewId) {
+                routingWindows[i].requestActivate()
+                return routingWindows[i]
+            }
+        }
+        const component = routingComponent(viewId)
+        if (!component)
+            return null
+        const window = component.createObject(root, { viewId: viewId })
+        if (!window)
+            return null
+        routingWindows.push(window)
+        window.closing.connect(function () {
+            const index = root.routingWindows.indexOf(window)
+            if (index >= 0)
+                root.routingWindows.splice(index, 1)
+        })
+        return window
+    }
+
+    function routingComponent(viewId) {
+        switch (viewId) {
+        case "routes": return routesWindowComponent
+        case "ospf": return ospfWindowComponent
+        case "bgp": return bgpWindowComponent
+        }
+        return null
+    }
+
+    function closeRoutingWindows() {
+        while (routingWindows.length > 0)
+            routingWindows.pop().close()
+    }
+
+    Component { id: routesWindowComponent; RoutesWindow {} }
+    Component { id: ospfWindowComponent; OspfWindow {} }
+    Component { id: bgpWindowComponent; BgpWindow {} }
 
     function toolComponent(toolId) {
         switch (toolId) {
@@ -375,6 +426,68 @@ ApplicationWindow {
                     }
                 }
 
+                // Routing: the protocol state and the kernel table, one window
+                // per protocol family (owner decision: routing is first-class).
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 30
+                    color: routingHeaderHover.containsMouse ? "#333333" : "transparent"
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 8
+                        text: (root.routingExpanded ? "\u25be  " : "\u25b8  ") + qsTr("Routing")
+                        color: "#e8e8e8"
+                        font.bold: true
+                        font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                        id: routingHeaderHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: root.routingExpanded = !root.routingExpanded
+                    }
+                }
+
+                Column {
+                    id: routingList
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 18
+                    visible: root.routingExpanded
+                    spacing: 0
+
+                    Repeater {
+                        model: root.routingViews
+
+                        delegate: Rectangle {
+                            id: routingRow
+                            required property var modelData
+
+                            width: routingList.width
+                            height: 30
+                            color: routingRowHover.containsMouse ? "#333333" : "transparent"
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.left: parent.left
+                                anchors.leftMargin: 10
+                                text: routingRow.modelData.title
+                                color: AppEngine.connected ? "#e8e8e8" : "#7a7a7a"
+                                font.pixelSize: 13
+                            }
+
+                            MouseArea {
+                                id: routingRowHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: root.openRouting(routingRow.modelData.id)
+                            }
+                        }
+                    }
+                }
+
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 30
@@ -590,6 +703,7 @@ ApplicationWindow {
                 root.closeInterfaceWindows()
                 root.closeConfigWindows()
                 root.closePluginWindows()
+                root.closeRoutingWindows()
                 root.closeToolWindows()
                 return
             }
@@ -607,6 +721,10 @@ ApplicationWindow {
                 const window = root.openConfig(root.startupConfig, root.startupConfigSectionName)
                 if (window && root.startupStage.length > 0)
                     window.stageAfterLoad = root.startupStage
+            }
+            if (root.startupRouting.length > 0 && !root.startupRoutingOpened) {
+                root.startupRoutingOpened = true
+                root.openRouting(root.startupRouting)
             }
             if (root.startupTool.length > 0 && !root.startupToolOpened) {
                 root.startupToolOpened = true

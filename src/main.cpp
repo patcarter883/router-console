@@ -34,11 +34,14 @@ int main(int argc, char *argv[])
         "config-section", "select this UCI section in the opened config editor", "name");
     const QCommandLineOption stageOption("stage", "stage option=value in the opened config editor",
                                          "option=value");
+    const QCommandLineOption routingOption("open-routing",
+                                           "open this routing view on connect (routes, ospf, bgp)",
+                                           "id");
     const QCommandLineOption pluginOption("open-plugin",
                                           "open the plugin view for this plugin id on connect",
                                           "id");
     parser.addOptions({hostOption, userOption, passwordOption, trustOption, interfaceOption,
-                       configOption, configSectionOption, stageOption, pluginOption});
+                       configOption, configSectionOption, stageOption, pluginOption, routingOption});
     const QCommandLineOption toolOption("open-tool",
                                         "open this tool window on connect (ping, traceroute, "
                                         "portscan, torch, files, sqm)",
@@ -65,6 +68,7 @@ int main(int argc, char *argv[])
     qml.rootContext()->setContextProperty("startupStageValue", parser.value(stageOption));
     qml.rootContext()->setContextProperty("startupPluginId", parser.value(pluginOption));
     qml.rootContext()->setContextProperty("startupToolId", parser.value(toolOption));
+    qml.rootContext()->setContextProperty("startupRoutingId", parser.value(routingOption));
     qml.loadFromModule("RouterConsole", "Main");
     if (qml.rootObjects().isEmpty())
         return 1;
