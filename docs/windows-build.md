@@ -18,13 +18,17 @@ of a GUI installer that cannot run headless.
 ## CI
 
 `.github/workflows/ci.yml` runs a two-leg matrix (`ubuntu-latest` + GCC with
-Ninja, `windows-latest` + MSVC with the Visual Studio 17 2022 generator) on
-Qt 6.8.3, builds `router-console`, runs `ctest -LE vm-boot`, and uploads
+Ninja, `windows-latest` + MSVC with Ninja) on Qt 6.8.3, builds `router-console`, runs `ctest -LE vm-boot`, and uploads
 `router-console-linux-x86_64.tar.gz` and `router-console-windows-x86_64.zip`.
 
 `ctest` skips the integration tests with exit code 3 when the dev VM is not
 reachable (that is the `SKIP_RETURN_CODE`), so a CI run proves compilation,
 linking and the non-VM test surface, not router behaviour.
+
+The Windows leg enters the MSVC environment with `ilammy/msvc-dev-cmd` instead of
+using a Visual Studio generator: `windows-latest` now ships Visual Studio 18, and
+CMake's `Visual Studio 17 2022` generator fails to find an instance there. vcvars
+plus Ninja has no such dependency on a specific VS version.
 
 The `vm-boot` labelled tests (`discovery-after-boot`, `uci-sqm-staged-reboot`)
 reboot the VM and are excluded from CI.
