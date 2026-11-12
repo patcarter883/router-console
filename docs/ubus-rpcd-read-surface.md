@@ -74,7 +74,30 @@ declares which:
 
 ## Auth
 
-- rpcd login: POST /ubus {"method":"call","params":["000...","session","login",
+- rpcd login: POST /ubus {"jsonrpc":"2.0","id":1,"method":"call","params":["000...","session","login",
   {"username","password"}]} -> ubus_rpc_session token + sessionid; every later
   call carries the token. ACLs via /usr/share/rpcd/acl.d — a client ACL file
   ships in our custom package feed granting exactly the surfaces above.
+
+Measured against 25.12.6 (see docs/dev-vm-recipe.md for the full smoke test):
+
+    {"jsonrpc":"2.0","id":1,"result":[0,{"ubus_rpc_session":"<32 hex>",
+      "timeout":300,"expires":300,"acls":{"access-group":{...},"ubus":{...},"uci":{...}},
+      "data":{"username":"root"}}]}
+
+- `result[0]` is the ubus status code (`0` OK, `6` PERMISSION_DENIED, `5` NO_DATA,
+  `4` NOT_FOUND, `3` METHOD_NOT_FOUND, `1` INVALID_COMMAND, `2` INVALID_ARGUMENT,
+  `7` TIMEOUT, `8` NOT_SUPPORTED). A uhttpd-level rejection instead carries
+  `{"error":{"code":-32000,"message":"..."}}`, typically with HTTP 403.
+- `timeout` is 300 s from the default rpcd ACL session timeout: the client must
+  re-login on status 6 (or proactively before `expires`) and retry the call once,
+  not surface an auth failure to the user.
+- The token is per-session and unprivileged-by-IP: rpcd ENFORCES the `acls` map it
+  returns, so a call absent from that map fails with status 6 even as root.
+- TLS: uhttpd serves a self-signed certificate generated on first start. The
+  client pins the peer certificate's SHA-256 fingerprint per host, stores it on
+  first trust (explicit user confirmation in the connect window), and refuses a
+  changed fingerprint. Blanket `ignoreSslErrors` is not acceptable.
+- `luci-rpc` in this doc is the **ubus object** (`luci-rpc.getBoardJSON`,
+  `getNetworkDevices`, ...). In 25.12 it ships inside the `luci-base` package —
+  there is no package named `luci-rpc` any more.
