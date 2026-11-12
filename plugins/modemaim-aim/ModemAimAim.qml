@@ -201,8 +201,7 @@ Item {
                     anchors.margins: 8
                     color: root.muted
                     font.pixelSize: 10
-                    text: qsTr("N up · rings %1 km apart · dots are ACMA sites, ticks are your marks")
-                              .arg((root.rangeKm / 4).toFixed(root.rangeKm >= 20 ? 0 : 1))
+                    text: qsTr("N up · dots are ACMA sites · ticks are your marks")
                 }
             }
 
@@ -462,8 +461,14 @@ Item {
             ctx.beginPath()
             ctx.arc(cx, cy, r, 0, 2 * Math.PI)
             ctx.stroke()
+            // On the NNE ray: between the N and 45-degree labels, where the ring
+            // has only a tick, so neither a compass label nor a mark label
+            // lands on the ring caption.
             ctx.fillStyle = root.muted
-            ctx.fillText((km * q / 4).toFixed(km >= 20 ? 0 : 1) + " km", cx + 4, cy - r - 3)
+            var ringAngle = -67.5 * Math.PI / 180
+            ctx.fillText((km * q / 4).toFixed(km >= 20 ? 0 : 1) + " km",
+                         cx + Math.cos(ringAngle) * r + 4,
+                         cy + Math.sin(ringAngle) * r + 3)
         }
 
         // Ticks every 15 degrees, labels every 45.
