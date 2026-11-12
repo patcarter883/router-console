@@ -51,6 +51,11 @@ public slots:
     void uciRevert(const QString &config);
     void systemReboot();
 
+    // Generic call for plugin-declared surfaces. `key` is echoed back unchanged
+    // so one caller thread can keep several requests in flight.
+    void callApp(const QString &key, const QString &object, const QString &method,
+                 const QJsonObject &args);
+
 signals:
     void loggedIn(const Ubus::Session &session);
     void loginFailed(const Ubus::Error &error);
@@ -78,6 +83,9 @@ signals:
     void uciRevertFailed(const Ubus::Error &error);
     void rebootRequested();
     void rebootFailed(const Ubus::Error &error);
+
+    void appCallSucceeded(const QString &key, const QJsonObject &result);
+    void appCallFailed(const QString &key, const Ubus::Error &error);
 
 private:
     using ResultHandler = std::function<void(const QJsonObject &result, const Ubus::Error &error)>;

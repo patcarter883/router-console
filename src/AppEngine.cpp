@@ -6,6 +6,8 @@
 #include "models/InterfacesModel.h"
 #include "DiscoveredHostsModel.h"
 #include "config/ConfigEditor.h"
+#include "plugins/PluginHub.h"
+#include "plugins/PluginSession.h"
 #include "protocol/MdnsDiscovery.h"
 #include "protocol/UbusClient.h"
 
@@ -23,6 +25,7 @@ AppEngine::AppEngine(QObject *parent) : QObject(parent)
 
     m_client = new UbusClient;
     m_interfaces = new InterfacesModel(m_client, this);
+    m_plugins = new Plugin::Hub(Plugin::rootDirectory(), m_client, this);
     m_client->moveToThread(&m_thread);
     connect(&m_thread, &QThread::finished, m_client, &QObject::deleteLater);
 
@@ -180,10 +183,26 @@ void AppEngine::rejectCertificate()
     setState(State::Failed, QStringLiteral("router certificate rejected"));
 }
 
+QAbstractItemModel *AppEngine::pluginsModel() const
+{
+    return m_plugins->plugins();
+}
+
+QObject *AppEngine::openPlugin(const QString &pluginId)
+{
+    if (!isConnected())
+        return nullptr;
+    const QSettings settings;
+    m_plugins->setEndpoint(QUrl(QStringLiteral("https://%1:%2").arg(m_host).arg(m_port)),
+                           settings.value(settingsKey()).toByteArray());
+    return m_plugins->open(pluginId);
+}
+
 void AppEngine::disconnectFromRouter()
 {
     UbusClient *client = m_client;
     QMetaObject::invokeMethod(client, &UbusClient::closeSession, Qt::QueuedConnection);
+    m_plugins->stopAll();
     m_interfaces->stop();
     m_board = {};
     setState(State::Idle);
