@@ -94,6 +94,12 @@ in the lan firewall zone, lan2 in `umdns.@umdns[-1].network`, and the
 `umdns-announce` timer described in
 [ubus-rpcd-read-surface.md](ubus-rpcd-read-surface.md#router-auto-discovery-connect-window).
 
+The VM's hostname is `openwrt-dev` (`uci set system.@system[0].hostname`), so the
+discovered name is unambiguous next to the other mDNS hosts on the desk LAN.
+Only one QEMU instance can hold the forwards and the relay port, so `.vm/` and
+the running VM belong to the worktree that started it: stop it before booting
+from another worktree.
+
 
 The guest LAN is renumbered to 192.168.77.1/24 so no address on this host can be
 confused with the production router at 192.168.1.1:
