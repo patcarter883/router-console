@@ -66,11 +66,123 @@ DomainSpec systemDomain()
     return spec;
 }
 
+// /etc/config/network on the VM holds five `config interface` sections
+// (loopback, lan, wan, wan6, lan2) whose options are device, proto, ipaddr and
+// ip6assign; the proto values in the file are static, dhcp and dhcpv6.
+DomainSpec networkDomain()
+{
+    DomainSpec spec;
+    spec.id = QStringLiteral("network");
+    spec.title = QStringLiteral("Network");
+    spec.config = QStringLiteral("network");
+    spec.sectionType = QStringLiteral("interface");
+    spec.summaryOptions = {QStringLiteral("device"), QStringLiteral("proto"),
+                           QStringLiteral("ipaddr")};
+    spec.fields = {
+        {QStringLiteral("device"), QStringLiteral("Device"), FieldKind::Text, {}, {}, false},
+        {QStringLiteral("proto"), QStringLiteral("Protocol"), FieldKind::Choice, {},
+         {QStringLiteral("static"), QStringLiteral("dhcp"), QStringLiteral("dhcpv6")}, false},
+        {QStringLiteral("ipaddr"), QStringLiteral("IPv4 address"), FieldKind::Text,
+         QStringLiteral("addr/prefix"), {}, false},
+        {QStringLiteral("ip6assign"), QStringLiteral("IPv6 prefix length"), FieldKind::Integer,
+         QStringLiteral("bits"), {}, false},
+    };
+    return spec;
+}
+
+// /etc/config/wireless does not exist on the dev VM: no wireless package is
+// installed, so uci answers "not found" and the editor shows an empty domain.
+// The option names are the UCI wifi-iface schema OpenWrt writes when a radio is
+// present (the file the wireless stack generates), not values read from this VM.
+DomainSpec wirelessDomain()
+{
+    DomainSpec spec;
+    spec.id = QStringLiteral("wireless");
+    spec.title = QStringLiteral("Wireless");
+    spec.config = QStringLiteral("wireless");
+    spec.sectionType = QStringLiteral("wifi-iface");
+    spec.summaryOptions = {QStringLiteral("device"), QStringLiteral("mode"),
+                           QStringLiteral("ssid")};
+    spec.fields = {
+        {QStringLiteral("device"), QStringLiteral("Radio"), FieldKind::Text,
+         QStringLiteral("radio0"), {}, false},
+        {QStringLiteral("mode"), QStringLiteral("Mode"), FieldKind::Choice, {},
+         {QStringLiteral("ap"), QStringLiteral("sta"), QStringLiteral("mesh")}, false},
+        {QStringLiteral("ssid"), QStringLiteral("SSID"), FieldKind::Text, {}, {}, false},
+        {QStringLiteral("network"), QStringLiteral("Attach to network"), FieldKind::Text, {}, {},
+         false},
+        {QStringLiteral("encryption"), QStringLiteral("Encryption"), FieldKind::Choice, {},
+         {QStringLiteral("none"), QStringLiteral("psk2"), QStringLiteral("sae"),
+          QStringLiteral("psk-mixed")},
+         false},
+        {QStringLiteral("key"), QStringLiteral("Key"), FieldKind::Text, {}, {}, false},
+    };
+    return spec;
+}
+
+// /etc/config/firewall has two `config zone` sections (cfg02dc81 = lan,
+// cfg03dc81 = wan) carrying name, network, input, output, forward, masq and
+// mtu_fix; ACCEPT/REJECT/DROP are the policy values the file uses.
+DomainSpec firewallDomain()
+{
+    DomainSpec spec;
+    spec.id = QStringLiteral("firewall");
+    spec.title = QStringLiteral("Firewall");
+    spec.config = QStringLiteral("firewall");
+    spec.sectionType = QStringLiteral("zone");
+    spec.summaryOptions = {QStringLiteral("name"), QStringLiteral("input"),
+                           QStringLiteral("forward")};
+    spec.fields = {
+        {QStringLiteral("name"), QStringLiteral("Zone"), FieldKind::Text, {}, {}, false},
+        {QStringLiteral("input"), QStringLiteral("Input"), FieldKind::Choice, {},
+         {QStringLiteral("ACCEPT"), QStringLiteral("REJECT"), QStringLiteral("DROP")}, false},
+        {QStringLiteral("output"), QStringLiteral("Output"), FieldKind::Choice, {},
+         {QStringLiteral("ACCEPT"), QStringLiteral("REJECT"), QStringLiteral("DROP")}, false},
+        {QStringLiteral("forward"), QStringLiteral("Forward"), FieldKind::Choice, {},
+         {QStringLiteral("ACCEPT"), QStringLiteral("REJECT"), QStringLiteral("DROP")}, false},
+        {QStringLiteral("masq"), QStringLiteral("Masquerade"), FieldKind::Boolean, {}, {}, false},
+        {QStringLiteral("mtu_fix"), QStringLiteral("MTU fix"), FieldKind::Boolean, {}, {}, false},
+    };
+    return spec;
+}
+
+// /etc/config/dhcp on the VM has two `config dhcp` sections (lan, wan) with
+// interface, start, limit, leasetime, dhcpv4, dhcpv6, ra and ignore. The pool
+// states are the values odhcpd/dnsmasq accept for those options.
+DomainSpec dhcpDomain()
+{
+    DomainSpec spec;
+    spec.id = QStringLiteral("dhcp");
+    spec.title = QStringLiteral("DHCP / DNS");
+    spec.config = QStringLiteral("dhcp");
+    spec.sectionType = QStringLiteral("dhcp");
+    spec.summaryOptions = {QStringLiteral("interface"), QStringLiteral("start"),
+                           QStringLiteral("limit"), QStringLiteral("leasetime")};
+    spec.fields = {
+        {QStringLiteral("interface"), QStringLiteral("Interface"), FieldKind::Text, {}, {}, false},
+        {QStringLiteral("start"), QStringLiteral("Pool start"), FieldKind::Integer, {}, {}, false},
+        {QStringLiteral("limit"), QStringLiteral("Pool size"), FieldKind::Integer, {}, {}, false},
+        {QStringLiteral("leasetime"), QStringLiteral("Lease time"), FieldKind::Text,
+         QStringLiteral("h"), {}, false},
+        {QStringLiteral("dhcpv4"), QStringLiteral("DHCPv4"), FieldKind::Choice, {},
+         {QStringLiteral("server"), QStringLiteral("relay"), QStringLiteral("disabled")}, false},
+        {QStringLiteral("dhcpv6"), QStringLiteral("DHCPv6"), FieldKind::Choice, {},
+         {QStringLiteral("server"), QStringLiteral("relay"), QStringLiteral("disabled")}, false},
+        {QStringLiteral("ra"), QStringLiteral("Router advertisements"), FieldKind::Choice, {},
+         {QStringLiteral("server"), QStringLiteral("relay"), QStringLiteral("disabled")}, false},
+        {QStringLiteral("ignore"), QStringLiteral("Ignore this interface"), FieldKind::Boolean,
+         {}, {}, false},
+    };
+    return spec;
+}
+
 } // namespace
 
 const QList<DomainSpec> &domains()
 {
-    static const QList<DomainSpec> registry{sqmDomain(), systemDomain()};
+    static const QList<DomainSpec> registry{sqmDomain(),  systemDomain(), networkDomain(),
+                                            wirelessDomain(), firewallDomain(),
+                                            dhcpDomain()};
     return registry;
 }
 

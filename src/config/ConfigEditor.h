@@ -44,7 +44,7 @@ public:
     QString domainId() const { return m_spec.id; }
     QString title() const { return m_spec.title; }
     QString config() const { return m_spec.config; }
-    bool isLoaded() const { return !m_config.isEmpty(); }
+    bool isLoaded() const { return m_loaded; }
     bool isBusy() const { return m_busy; }
     QString statusText() const { return m_status; }
     QString errorText() const { return m_error; }
@@ -99,4 +99,9 @@ private:
     QString m_status;
     QString m_error;
     bool m_busy = false;
+    // True once a read has answered, including a package the router does not
+    // have: the domain loaded, it just holds no sections.
+    bool m_loaded = false;
+    // The last read answered NotFound: the package does not exist on this router.
+    bool m_absent = false;
 };
