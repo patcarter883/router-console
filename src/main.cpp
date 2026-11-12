@@ -1,6 +1,7 @@
 #include <QCommandLineParser>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
 
 #include "AppEngine.h"
 
@@ -20,7 +21,10 @@ int main(int argc, char *argv[])
     const QCommandLineOption passwordOption({"p", "password"}, "password", "password");
     const QCommandLineOption trustOption("accept-new-cert",
                                          "accept an unseen router certificate on start");
-    parser.addOptions({hostOption, userOption, passwordOption, trustOption});
+    const QCommandLineOption interfaceOption("open-interface",
+                                             "open the graph window for this interface on connect",
+                                             "name");
+    parser.addOptions({hostOption, userOption, passwordOption, trustOption, interfaceOption});
     parser.process(app);
 
     auto *engine = new AppEngine(&app);
@@ -34,6 +38,7 @@ int main(int argc, char *argv[])
     qmlRegisterSingletonInstance("RouterConsole", 1, 0, "AppEngine", engine);
 
     QQmlApplicationEngine qml;
+    qml.rootContext()->setContextProperty("startupInterfaceName", parser.value(interfaceOption));
     qml.loadFromModule("RouterConsole", "Main");
     if (qml.rootObjects().isEmpty())
         return 1;

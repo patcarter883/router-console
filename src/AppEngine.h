@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QAbstractItemModel>
 #include <QByteArray>
 #include <QObject>
 #include <QThread>
@@ -7,6 +8,7 @@
 #include "protocol/UbusTypes.h"
 
 class UbusClient;
+class InterfacesModel;
 
 // Owns the connection lifecycle and exposes it to QML as plain properties.
 // The ubus client lives in its own thread; every call into it is queued and
@@ -27,6 +29,7 @@ class AppEngine : public QObject
     Q_PROPERTY(QString target READ target NOTIFY stateChanged)
     Q_PROPERTY(bool trustPending READ trustPending NOTIFY stateChanged)
     Q_PROPERTY(QString trustFingerprint READ trustFingerprint NOTIFY stateChanged)
+    Q_PROPERTY(QAbstractItemModel *interfaces READ interfacesModel CONSTANT)
 
 public:
     explicit AppEngine(QObject *parent = nullptr);
@@ -43,6 +46,7 @@ public:
     QString kernel() const { return m_board.kernel; }
     QString target() const { return m_board.target; }
     QString trustFingerprint() const { return QString::fromLatin1(m_pendingPin); }
+    QAbstractItemModel *interfacesModel() const;
 
     Q_INVOKABLE void connectTo(const QString &host, const QString &port, const QString &username,
                                const QString &password);
@@ -69,6 +73,7 @@ private:
 
     QThread m_thread;
     UbusClient *m_client = nullptr;
+    InterfacesModel *m_interfaces = nullptr;
     State m_state = State::Idle;
     Ubus::BoardInfo m_board;
     QString m_host;
