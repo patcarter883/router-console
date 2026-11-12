@@ -16,6 +16,7 @@
 #include "tools/FilesTool.h"
 #include "tools/PingTool.h"
 #include "tools/PortScanTool.h"
+#include "routing/RoutingTools.h"
 #include "tools/SqmStatsTool.h"
 #include "tools/TorchModel.h"
 #include "tools/TracerouteTool.h"
@@ -40,6 +41,9 @@ AppEngine::AppEngine(QObject *parent) : QObject(parent)
     m_portScan = new PortScanTool(m_client, this);
     m_files = new FilesTool(m_client, this);
     m_sqm = new SqmStatsTool(m_client, this);
+    m_routes = new Routing::RoutesTool(m_client, this);
+    m_ospf = new Routing::OspfTool(m_client, this);
+    m_bgp = new Routing::BgpTool(m_client, this);
     m_torch = new TorchModel(m_client, this);
     m_client->moveToThread(&m_thread);
     connect(&m_thread, &QThread::finished, m_client, &QObject::deleteLater);
@@ -123,6 +127,21 @@ QObject *AppEngine::filesTool()
 QObject *AppEngine::sqmStatsTool()
 {
     return m_sqm;
+}
+
+QObject *AppEngine::routesTool()
+{
+    return m_routes;
+}
+
+QObject *AppEngine::ospfTool()
+{
+    return m_ospf;
+}
+
+QObject *AppEngine::bgpTool()
+{
+    return m_bgp;
 }
 
 QAbstractItemModel *AppEngine::torchModel()
@@ -262,6 +281,9 @@ void AppEngine::resetTools()
     m_portScan->reset();
     m_files->reset();
     m_sqm->reset();
+    m_routes->reset();
+    m_ospf->reset();
+    m_bgp->reset();
 }
 
 QObject *AppEngine::configEditor(const QString &domainId)

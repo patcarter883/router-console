@@ -16,10 +16,13 @@ add_library(router-console-core STATIC
     plugins/PluginHub.cpp
     plugins/PluginSession.cpp
     plugins/PluginSpec.cpp
+    protocol/FrrCodec.cpp
     protocol/MdnsDiscovery.cpp
     protocol/ToolCodec.cpp
     protocol/UbusClient.cpp
     protocol/UciCodec.cpp
+    routing/RoutingModels.cpp
+    routing/RoutingTools.cpp
     tools/FilesTool.cpp
     tools/PingTool.cpp
     tools/PortScanTool.cpp
@@ -47,6 +50,9 @@ qt_add_qml_module(router-console
         qml/ConfigWindow.qml
         qml/FilesWindow.qml
         qml/InterfaceWindow.qml
+        qml/RoutesWindow.qml
+        qml/OspfWindow.qml
+        qml/BgpWindow.qml
         qml/Main.qml
         qml/Connect.qml
         qml/PluginWindow.qml

@@ -21,6 +21,11 @@ class MdnsDiscovery;
 namespace Plugin {
 class Hub;
 }
+namespace Routing {
+class RoutesTool;
+class OspfTool;
+class BgpTool;
+}
 class PingTool;
 class TracerouteTool;
 class PortScanTool;
@@ -58,6 +63,9 @@ class AppEngine : public QObject
     Q_PROPERTY(QObject *portScanTool READ portScanTool CONSTANT)
     Q_PROPERTY(QObject *filesTool READ filesTool CONSTANT)
     Q_PROPERTY(QObject *sqmStatsTool READ sqmStatsTool CONSTANT)
+    Q_PROPERTY(QObject *routesTool READ routesTool CONSTANT)
+    Q_PROPERTY(QObject *ospfTool READ ospfTool CONSTANT)
+    Q_PROPERTY(QObject *bgpTool READ bgpTool CONSTANT)
     Q_PROPERTY(QAbstractItemModel *torchModel READ torchModel CONSTANT)
 
 public:
@@ -87,6 +95,9 @@ public:
     QObject *portScanTool();
     QObject *filesTool();
     QObject *sqmStatsTool();
+    QObject *routesTool();
+    QObject *ospfTool();
+    QObject *bgpTool();
     QAbstractItemModel *torchModel();
 
     // The ubus client this engine owns. The integration tests use it when a
@@ -137,6 +148,9 @@ private:
     PortScanTool *m_portScan = nullptr;
     FilesTool *m_files = nullptr;
     SqmStatsTool *m_sqm = nullptr;
+    Routing::RoutesTool *m_routes = nullptr;
+    Routing::OspfTool *m_ospf = nullptr;
+    Routing::BgpTool *m_bgp = nullptr;
     TorchModel *m_torch = nullptr;
     QThread m_discoveryThread;
     MdnsDiscovery *m_discovery = nullptr;
