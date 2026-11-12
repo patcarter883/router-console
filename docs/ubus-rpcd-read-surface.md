@@ -87,8 +87,11 @@ Measured against 25.12.6 (see docs/dev-vm-recipe.md for the full smoke test):
 
 - `result[0]` is the ubus status code (`0` OK, `6` PERMISSION_DENIED, `5` NO_DATA,
   `4` NOT_FOUND, `3` METHOD_NOT_FOUND, `1` INVALID_COMMAND, `2` INVALID_ARGUMENT,
-  `7` TIMEOUT, `8` NOT_SUPPORTED). A uhttpd-level rejection instead carries
-  `{"error":{"code":-32000,"message":"..."}}`, typically with HTTP 403.
+  `7` TIMEOUT, `8` NOT_SUPPORTED). A rejected call may return a **one-element**
+  array — a wrong password answers exactly `{"result":[6]}`, with no data object
+  — so parsers must not assume `result[1]` exists. A uhttpd-level rejection
+  instead carries `{"error":{"code":-32000,"message":"..."}}`, typically with
+  HTTP 403.
 - `timeout` is 300 s from the default rpcd ACL session timeout: the client must
   re-login on status 6 (or proactively before `expires`) and retry the call once,
   not surface an auth failure to the user.
