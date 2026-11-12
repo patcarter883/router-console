@@ -85,47 +85,122 @@ have a compiled-in schema. Views read it as `samples.<id>.fields`.
 
 ## The three app plugins
 
-| plugin | surface | state |
-| --- | --- | --- |
-| `rist2rist` | procd `service.list {name:rist2rist}` + `uci get rist2rist` | real surface; the LuCI app has no rpcd object of its own |
-| `modemaim` | `modemaim status`, `modemaim origin` + HTTP `/luci-static/resources/modemaim/towers.json` | real rpcd surface and real static-file pattern |
-| `nettime` | `nettime status` + procd `service.list` | status method is a **mock**; see below |
+Each row names what is now **real** on the dev VM — installed from the app's own
+package or deploy path, verified by its data test — and what remains thinner
+than the app on the live router.
+
+| plugin | bound surface | on the VM | real? |
+| --- | --- | --- | --- |
+| `rist2rist` | procd `service.list {name:rist2rist}` + `uci get rist2rist` | `luci-app-rist2rist` 1.0.0-r49 apk; `/usr/bin/rist2rist` running on UDP 5000 with the packaged init, config, rpcd object and ACL | **real package and real daemon** |
+| `modemaim` | `modemaim status`, `modemaim origin` + HTTP `/luci-static/resources/modemaim/towers.json` | the app's own rpcd plugin, ACL and the real ACMA extract (3,810 rows), deployed by `cellular/router/deploy-modemaim.sh` | **real rpcd surface and real extract**; no modem, so signal is absent |
+| `nettime` | `nettime status` + procd `service.list` | `nettime` 1.0-r1 apk; `/usr/bin/nettime` serving `CLOCK_REALTIME` on UDP 5637 | **real provider daemon**; the status object is a shim (below) |
 
 ### rist2rist
 
-The vendored app (`open-broadcast-product-codec/luci-app-rist2rist`) grants only
-`service list`, `uci rist2rist` and `logread -e rist2rist`; its LuCI view reads
-exactly those. The plugin binds to the first two. On the VM the package is not
-built: a `sleep` daemon registered by `/etc/init.d/rist2rist` and
-`/etc/config/rist2rist` (main + two destinations) give `service.list` and `uci`
-the real shapes to answer with. The bridge's own RIST metrics are not exposed on
-the ubus surface, so the view does not show them — it shows daemon state and
-configuration, which is what the LuCI page shows too.
+The packaged app grants `service list`, `uci rist2rist` and
+`logread -e rist2rist` to a LuCI session, and its own view's status widget reads
+exactly `service.list` (running flag + pid) plus the log. The plugin binds the
+first two, so the view and the LuCI page show the same figures from the same
+call.
+
+The package also ships an rpcd object (`rist2rist status/get_config/wan_status/
+set_config/...`), which is **not** bound: every read method on it verifies the
+bridge's pair token, a per-bridge secret that has no place in a plugin manifest.
+On the VM an unclaimed bridge answers:
+
+    # ubus call rist2rist status
+    {"ok": false, "error": "unclaimed", "message": "this bridge has not been claimed; call claim first"}
+
+The view therefore shows what the packaged config holds — listen URL, profiles,
+buffer/RTT/reorder window, config-authority state and the destination list —
+plus procd's live pid and the daemon's real argv. The RIST transport counters
+themselves are not on any token-free ubus surface, so they are not shown; that is
+a property of the app, not a gap in the client.
 
 ### modemaim
 
 `ubus call modemaim status` answers signal, serving cell, neighbours and the
 mapped site; the tower extract is deliberately **not** served over ubus (over
-1 MiB it unregisters the whole rpcd object). The view therefore pulls
-`towers.json` over HTTP and computes distance/bearing from `modemaim origin`,
-mirroring the LuCI views. On the VM, `scripts/vm-mock-apps.sh` installs a mock
-rpcd script with the real script's JSON keys (`cellular/luci-app-modemaim/root/usr/libexec/rpcd/modemaim`)
-and a small extract with the real schema (`site, lat, lon, band, mhz, bw, eirp,
-h, azs, hbw, carrier` + `data_date`). No modem is present, so the values are
-fixed; the shape is what the client binds to.
+1 MiB it unregisters the whole rpcd object). The view pulls `towers.json` over
+HTTP and computes distance/bearing from `modemaim origin`, mirroring the LuCI
+views.
+
+The m6 window never actually rendered — its evidence screenshot showed
+`Plugin view failed to load`, because the list header set `rightPadding`, which
+`RowLayout` does not have (Qt rejects the whole component). The header now binds
+the view's own width and the padding properties are gone; all four plugin QML
+files load through `QQmlComponent`.
+
+The VM runs the real plugin (`cellular/luci-app-modemaim/root/usr/libexec/rpcd/modemaim`,
+627 lines) against the real extract (`cellular/data/towers.json`: 3,810 ACMA
+rows, `data_date 2026-11-07T09:06:09Z`). No MBIM modem exists on the VM, so
+`mbimcli` is absent and the honest answer is an empty measurement:
+
+    "state": "unknown", "rsrp": "", "serving": {"pci": "", ...}, "neighbors": []
+
+`scripts/vm-real-apps.sh` sets a fixed origin inside the extract's bounding box
+through the app's own `modemaim setorigin` method — a bench VM has no GPS, and
+without an origin the view cannot compute distance or bearing. The view renders
+the nearest licensed sites from the real extract at that origin.
 
 ### nettime
 
-The app is a GstNetTime provider on UDP 5637 on the video router. It exposes no
-rpcd object: its real surface is the clock itself and procd's view of the daemon.
-The client does not implement the GstNetTime wire protocol — the view reads a
-`nettime status` method and the procd service state, and says so in the
-window. That status method is a **mock** on the VM (port 5637, `CLOCK_REALTIME`,
-uptime from `/proc/uptime`, client count). Adding a real status method to the
-package (serving the provider's own counters) is the follow-up for the video
-router; nothing in the client has to change when it lands, only the fixture goes
-away.
+The app is a GstNetTime provider on UDP 5637: on the VM the packaged daemon runs
+and logs `nettime: serving GstSystemClock on 0.0.0.0:5637`. It exposes no
+rpcd object — its only surfaces are the UDP clock and procd's view of the daemon.
+The client does not implement the GstNetTime wire protocol, so the view reads a
+`nettime status` object plus the procd service state and says so in the
+window.
 
+That status object is **ours, not the app's** (`scripts/vm-fixtures/rpcd/nettime-shim`),
+and it is measured, not invented: `pid` is procd's instance pid, `port` is the
+UDP port that pid actually has bound (`netstat -lnup`), `enabled` is
+`/etc/init.d/nettime enabled`, and `clock` is `CLOCK_REALTIME` because the
+package's own source forces it. `uptime` and `clients` are **absent**: neither
+procd nor the provider records a start time or a client count, and the data test
+asserts they stay absent, so the view shows the pid it can prove instead of two
+permanently empty cells. Adding a status method to
+the package is the follow-up for the video router; nothing in the client changes
+when it lands — only the shim goes away.
+
+## Building and installing the real apps
+
+`scripts/vm-real-apps.sh` installs all three and prints each surface's raw
+answer. `scripts/vm-mock-apps.sh` still installs the milestone-6 stand-ins and is
+untouched; to go back, `apk del luci-app-rist2rist nettime`, then run it.
+
+The two packages that have a Makefile are built for x86/64 in the released SDK
+for **25.12.6** (`openwrt-sdk-25.12.6-x86-64_gcc-14.3.0_musl`, the exact release
+the VM runs):
+
+    cd openwrt-sdk-25.12.6-.../
+    ./scripts/feeds update base packages
+    ./scripts/feeds install libopenssl cjson
+    env -u LD_PRELOAD TOPDIR=$PWD make -C package/luci-app-rist2rist compile
+
+That build runs meson + ninja over the package's own `src/` (librist and
+`tools/rist2rist`), so the apk's binary is the app's, not a stand-in.
+
+`nettime` has **not** been rebuilt in the 25.12.6 SDK: it needs gstreamer
+staged, and this host's SDK build of `gettext-full` (a glib2 dependency) fails, so
+the apk installed on the VM is the 1.0-r1 build made from the same unchanged
+source in the 25.12.4 SDK on 2026-10-19, kept at
+`~/code/openwrt/artifacts/nettime-1.0-r1.apk`. What matters for requirement 5
+is verified either way: the packaged daemon runs and serves UDP 5637. Rebuilding
+it is a follow-up on a host whose SDK can stage gstreamer.
+
+`luci-app-modemaim` ships no Makefile — the cellular project installs it from
+`cellular/router/deploy-modemaim.sh`, which is what the VM script runs (with a
+`PATH` shim so the script's bare `ssh` reaches the forwarded port, and with
+`/usr/share/modemaim` created first: the script writes into it before creating
+it). Two apk quirks the script handles: the VM's dropbear has no `sftp-server`,
+so files go over `ssh 'cat >'`, and `apk` keeps its copy of a conffile that
+already exists untracked as `<file>.apk-new`, so those are adopted — otherwise
+the mock's init and config would keep winning.
+
+Build host notes: `make package/<name>/compile` at the top level of a fresh SDK
+drags in the target's device kmods; a direct `TOPDIR=$SDK make -C package/...`
+build avoids that, and needs `LD_PRELOAD` cleared for the host cmake wrapper.
 ## Adding a plugin
 
 ```
@@ -144,12 +219,15 @@ changed.
 | --- | --- |
 | `plugin-loading` | the four manifests parse; each app declares the sources it binds to; a missing view / missing sources is rejected with its reason |
 | `plugin-stub` | a stub added through the interface alone appears in the tree, with `git status` clean outside `plugins/` |
-| `plugin-data-rist2rist` | session receives procd service state and the `rist2rist` UCI package (main + destinations) |
-| `plugin-data-modemaim` | session receives `modemaim.status`, `modemaim.origin` and the tower extract over pinned TLS |
-| `plugin-data-nettime` | session receives `nettime.status` (port 5637, CLOCK_REALTIME) and the procd service state |
+| `plugin-data-rist2rist` | procd reports a **running** instance whose command is `/usr/bin/rist2rist`, with its pid and full argv; the `rist2rist` UCI package carries the packaged schema (`managed`, `api_port`) and a destination |
+| `plugin-data-modemaim` | `modemaim.status` carries the real key set and, with no modem, an empty measurement (`state: unknown`, empty `serving`, no neighbours) rather than filled-in values; `modemaim.origin` answers the configured origin; the real 3,810-row extract arrives over pinned TLS |
+| `plugin-data-nettime` | the status shim's `pid` **equals procd's** pid for the real provider, port 5637, `CLOCK_REALTIME`, enabled; `uptime`/`clients` are absent because the app provides neither |
 
-The data tests need the VM fixtures: `scripts/vm-mock-apps.sh` installs them and
-prints each surface's raw answer.
+The data tests now run against the **real app packages**: `scripts/vm-real-apps.sh`
+installs them and prints each surface's raw answer. A mock-only VM fails
+`plugin-data-rist2rist` at `daemon command = /bin/sleep 86400` — deliberately,
+because the packaged daemon is the surface requirement 5 binds. The mock script
+is still the right tool for UI work (`scripts/vm-mock-apps.sh` + `scripts/plugin-gui.sh`).
 
 Screenshots: `scripts/plugin-gui.sh` (headless X, `PLUGIN=<id>`; `PLUGIN=tree`
 captures the tree).

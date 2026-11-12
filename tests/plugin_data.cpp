@@ -49,6 +49,29 @@ void verifyRist2Rist(Plugin::Session &session)
     check(!service.fields.isEmpty(),
           QStringLiteral("rist2rist service is registered with procd (%1)").arg(service.fields.size()));
 
+    // The LuCI page's status widget reads exactly this: service.list, then the
+    // instance's running flag and pid. Same call, same figures.
+    QVariantMap instance;
+    QString instanceName;
+    for (auto entry = service.fields.begin(); entry != service.fields.end(); ++entry) {
+        const QVariantMap instances = entry.value().toMap().value(QStringLiteral("instances")).toMap();
+        for (auto i = instances.begin(); i != instances.end(); ++i) {
+            if (i.value().toMap().value(QStringLiteral("running")).toBool()) {
+                instance = i.value().toMap();
+                instanceName = i.key();
+            }
+        }
+    }
+    check(!instance.isEmpty(), QStringLiteral("procd reports a running instance (%1)").arg(instanceName));
+    check(instance.value(QStringLiteral("pid")).toInt() > 0,
+          QStringLiteral("instance pid = %1").arg(instance.value(QStringLiteral("pid")).toInt()));
+
+    // The daemon's own argv as the kernel has it: an installed package runs
+    // /usr/bin/rist2rist, a stand-in does not.
+    const QStringList command = instance.value(QStringLiteral("command")).toStringList();
+    check(command.value(0) == QLatin1String("/usr/bin/rist2rist"),
+          QStringLiteral("daemon command = %1").arg(command.join(QLatin1Char(' '))));
+
     check(config.ok, QStringLiteral("uci get rist2rist answered"));
     const QVariantMap main = object(config, QStringLiteral("main"));
     check(!main.isEmpty(), QStringLiteral("main section present"));
@@ -60,6 +83,13 @@ void verifyRist2Rist(Plugin::Session &session)
           QStringLiteral("profile = %1 / out_profile = %2")
               .arg(main.value(QStringLiteral("profile")).toString(),
                    main.value(QStringLiteral("out_profile")).toString()));
+    // Keys only the packaged config has: managed/pair-token state and the
+    // control API's port. Their presence is what distinguishes the app's own
+    // UCI schema from a four-key stand-in.
+    check(main.contains(QStringLiteral("managed")) && main.contains(QStringLiteral("api_port")),
+          QStringLiteral("packaged config: managed = %1, api_port = %2")
+              .arg(main.value(QStringLiteral("managed")).toString(),
+                   main.value(QStringLiteral("api_port")).toString()));
 
     int destinations = 0;
     for (const QVariant &value : config.fields) {
@@ -79,20 +109,38 @@ void verifyModemAim(Plugin::Session &session)
 {
     const Plugin::Sample status = session.sample(QStringLiteral("status"));
     check(status.ok, QStringLiteral("modemaim.status answered"));
-    check(!value(status, QStringLiteral("operator")).isEmpty(),
-          QStringLiteral("operator = %1").arg(value(status, QStringLiteral("operator"))));
-    check(!value(status, QStringLiteral("state")).isEmpty(),
-          QStringLiteral("state = %1").arg(value(status, QStringLiteral("state"))));
-    check(!value(status, QStringLiteral("rsrp")).isEmpty(),
-          QStringLiteral("rsrp = %1 dBm").arg(value(status, QStringLiteral("rsrp"))));
+
+    // The real script always answers with these keys; the values are the
+    // measurement, and an empty one is the honest "no reading", not a default.
+    check(status.fields.contains(QStringLiteral("state"))
+              && status.fields.contains(QStringLiteral("serving"))
+              && status.fields.contains(QStringLiteral("neighbors")),
+          QStringLiteral("status carries state, serving and neighbours"));
 
     const QVariantMap serving = object(status, QStringLiteral("serving"));
-    check(!serving.value(QStringLiteral("pci")).toString().isEmpty(),
-          QStringLiteral("serving pci = %1, earfcn = %2")
-              .arg(serving.value(QStringLiteral("pci")).toString(),
-                   serving.value(QStringLiteral("earfcn")).toString()));
-    check(!list(status, QStringLiteral("neighbors")).isEmpty(),
-          QStringLiteral("%1 neighbours").arg(list(status, QStringLiteral("neighbors")).size()));
+    const bool modemPresent = !value(status, QStringLiteral("rsrp")).isEmpty();
+    if (modemPresent) {
+        check(!value(status, QStringLiteral("operator")).isEmpty(),
+              QStringLiteral("operator = %1").arg(value(status, QStringLiteral("operator"))));
+        check(!value(status, QStringLiteral("state")).isEmpty(),
+              QStringLiteral("state = %1").arg(value(status, QStringLiteral("state"))));
+        check(!serving.value(QStringLiteral("pci")).toString().isEmpty(),
+              QStringLiteral("serving pci = %1, earfcn = %2")
+                  .arg(serving.value(QStringLiteral("pci")).toString(),
+                       serving.value(QStringLiteral("earfcn")).toString()));
+        check(!list(status, QStringLiteral("neighbors")).isEmpty(),
+              QStringLiteral("%1 neighbours").arg(list(status, QStringLiteral("neighbors")).size()));
+    } else {
+        // The VM has no MBIM modem: mbimcli is absent, so signal, serving cell
+        // and neighbours are empty. That is the app's real answer on this box,
+        // and it must stay absent rather than be filled in by the client.
+        check(value(status, QStringLiteral("state")) == QLatin1String("unknown"),
+              QStringLiteral("no modem: state = '%1'").arg(value(status, QStringLiteral("state"))));
+        check(value(status, QStringLiteral("rsrp")).isEmpty()
+                  && serving.value(QStringLiteral("pci")).toString().isEmpty()
+                  && list(status, QStringLiteral("neighbors")).isEmpty(),
+              QStringLiteral("no modem: signal, serving cell and neighbours are empty, not fabricated"));
+    }
 
     const Plugin::Sample origin = session.sample(QStringLiteral("origin"));
     check(origin.ok && origin.fields.value(QStringLiteral("lat")).toDouble() != 0.0,
@@ -131,12 +179,28 @@ void verifyNetTime(Plugin::Session &session)
           QStringLiteral("clock = %1").arg(value(status, QStringLiteral("clock"))));
     check(status.fields.value(QStringLiteral("enabled")).toBool(),
           QStringLiteral("enabled = %1").arg(value(status, QStringLiteral("enabled"))));
-    check(status.fields.value(QStringLiteral("uptime")).toInt() > 0,
-          QStringLiteral("uptime = %1 s").arg(status.fields.value(QStringLiteral("uptime")).toInt()));
 
     const Plugin::Sample service = session.sample(QStringLiteral("service"));
     check(service.ok && !service.fields.isEmpty(),
           QStringLiteral("procd reports the provider daemon running"));
+
+    // The status object is a shim over the packaged app, so its pid has to be
+    // procd's pid for the real daemon — not a figure of its own.
+    int procdPid = 0;
+    for (auto entry = service.fields.begin(); entry != service.fields.end(); ++entry) {
+        const QVariantMap instances = entry.value().toMap().value(QStringLiteral("instances")).toMap();
+        for (auto i = instances.begin(); i != instances.end(); ++i)
+            procdPid = i.value().toMap().value(QStringLiteral("pid")).toInt();
+    }
+    check(procdPid > 0 && status.fields.value(QStringLiteral("pid")).toInt() == procdPid,
+          QStringLiteral("status pid %1 = procd pid %2")
+              .arg(status.fields.value(QStringLiteral("pid")).toInt()).arg(procdPid));
+
+    // Neither procd nor the provider exposes a start time or a client counter.
+    // The shim must leave them out rather than invent them.
+    check(!status.fields.contains(QStringLiteral("uptime"))
+              && !status.fields.contains(QStringLiteral("clients")),
+          QStringLiteral("uptime and clients are absent, as the app provides neither"));
 }
 
 } // namespace
