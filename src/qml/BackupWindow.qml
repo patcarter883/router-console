@@ -8,16 +8,15 @@ import RouterConsole
 // Config backup/restore: one button writes a local .tar.gz of /etc/config plus
 // the package manifest; restore stages the archive on the router and only
 // writes /etc/config when the confirm button is pressed.
-Window {
+Rectangle {
     id: win
 
-    width: 900
-    height: 600
-    minimumWidth: 620
-    minimumHeight: 380
-    title: qsTr("Config backup")
+    implicitWidth: 900
+    implicitHeight: 600
+    property int minimumWidth: 620
+    property int minimumHeight: 380
+    property string windowTitle: qsTr("Config backup")
     color: "#1e1e1e"
-    visible: true
     property string toolId: ""
 
     readonly property var tool: AppEngine.backupTool

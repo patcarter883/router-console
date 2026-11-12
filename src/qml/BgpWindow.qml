@@ -7,16 +7,15 @@ import RouterConsole
 
 // BGP window: `show bgp summary` as a typed peers table with state and prefix
 // counters.
-Window {
+Rectangle {
     id: win
 
-    width: 900
-    height: 520
-    minimumWidth: 600
-    minimumHeight: 320
-    title: qsTr("BGP")
+    implicitWidth: 900
+    implicitHeight: 520
+    property int minimumWidth: 600
+    property int minimumHeight: 320
+    property string windowTitle: qsTr("BGP")
     color: "#1e1e1e"
-    visible: true
     property string viewId: ""
 
     readonly property var tool: AppEngine.bgpTool

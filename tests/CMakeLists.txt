@@ -10,7 +10,7 @@ target_link_libraries(connect-smoke PRIVATE router-console-core)
 
 # Runs against the dev VM (docs/dev-vm-recipe.md); skipped when it is not up.
 add_test(NAME connect-smoke
-         COMMAND connect-smoke --host 127.0.0.1:10443 --user root --password root --accept-new-cert)
+         COMMAND connect-smoke --host ${RC_TEST_HOST} --user root --password root --accept-new-cert)
 set_tests_properties(connect-smoke PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 40)
 
 # Star check for the graphs half: per-interface byte counters must grow across
@@ -19,7 +19,7 @@ add_executable(interfaces-traffic interfaces_traffic.cpp)
 target_link_libraries(interfaces-traffic PRIVATE router-console-core)
 
 add_test(NAME interfaces-traffic
-         COMMAND interfaces-traffic --host 127.0.0.1:10443 --user root --password root
+         COMMAND interfaces-traffic --host ${RC_TEST_HOST} --user root --password root
                  --accept-new-cert --interface br-lan --samples 6)
 set_tests_properties(interfaces-traffic PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 90)
 add_executable(discovery-smoke discovery_smoke.cpp)
@@ -46,14 +46,14 @@ add_executable(uci-sqm-staged uci_sqm_staged.cpp)
 target_link_libraries(uci-sqm-staged PRIVATE router-console-core)
 
 add_test(NAME uci-sqm-staged
-         COMMAND uci-sqm-staged --host 127.0.0.1:10443 --user root --password root
+         COMMAND uci-sqm-staged --host ${RC_TEST_HOST} --user root --password root
                  --accept-new-cert --domain sqm --section eth1 --option download)
 set_tests_properties(uci-sqm-staged PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 120)
 
 # Same flow with `uci apply` followed by `system reboot`: the committed value has
 # to survive a real VM boot. Labelled vm-boot because it reboots the VM.
 add_test(NAME uci-sqm-staged-reboot
-         COMMAND uci-sqm-staged --host 127.0.0.1:10443 --user root --password root
+         COMMAND uci-sqm-staged --host ${RC_TEST_HOST} --user root --password root
                  --accept-new-cert --domain sqm --section eth1 --option download --reboot)
 set_tests_properties(uci-sqm-staged-reboot PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 420
                      LABELS vm-boot)
@@ -70,7 +70,7 @@ target_link_libraries(uci-domain-staged PRIVATE router-console-core)
 
 foreach(domain network wireless firewall dhcp)
     add_test(NAME uci-${domain}-staged
-             COMMAND uci-domain-staged --host 127.0.0.1:10443 --user root --password root
+             COMMAND uci-domain-staged --host ${RC_TEST_HOST} --user root --password root
                      --accept-new-cert --domain ${domain})
     set_tests_properties(uci-${domain}-staged PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 120)
 endforeach()
@@ -82,7 +82,7 @@ add_executable(firewall-nat-staged firewall_nat_staged.cpp)
 target_link_libraries(firewall-nat-staged PRIVATE router-console-core)
 
 add_test(NAME firewall-nat-staged
-         COMMAND firewall-nat-staged --host 127.0.0.1:10443 --user root --password root
+         COMMAND firewall-nat-staged --host ${RC_TEST_HOST} --user root --password root
                  --accept-new-cert)
 set_tests_properties(firewall-nat-staged PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 120)
 
@@ -122,7 +122,7 @@ target_link_libraries(plugin-data PRIVATE router-console-core)
 
 foreach(plugin rist2rist modemaim nettime)
     add_test(NAME plugin-data-${plugin}
-             COMMAND plugin-data --plugin ${plugin} --host 127.0.0.1:10443 --user root
+             COMMAND plugin-data --plugin ${plugin} --host ${RC_TEST_HOST} --user root
                      --password root --accept-new-cert)
     set_tests_properties(plugin-data-${plugin} PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 60)
 endforeach()
@@ -131,21 +131,21 @@ endforeach()
 add_executable(tools-ping tools_ping.cpp)
 target_link_libraries(tools-ping PRIVATE router-console-core)
 add_test(NAME tools-ping
-         COMMAND tools-ping --host 127.0.0.1:10443 --user root --password root
+         COMMAND tools-ping --host ${RC_TEST_HOST} --user root --password root
                  --accept-new-cert --target 10.0.2.3 --count 3)
 set_tests_properties(tools-ping PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 60)
 
 add_executable(tools-traceroute tools_traceroute.cpp)
 target_link_libraries(tools-traceroute PRIVATE router-console-core)
 add_test(NAME tools-traceroute
-         COMMAND tools-traceroute --host 127.0.0.1:10443 --user root --password root
+         COMMAND tools-traceroute --host ${RC_TEST_HOST} --user root --password root
                  --accept-new-cert --target 10.0.2.3 --max-hops 6)
 set_tests_properties(tools-traceroute PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 60)
 
 add_executable(tools-portscan tools_portscan.cpp)
 target_link_libraries(tools-portscan PRIVATE router-console-core)
 add_test(NAME tools-portscan
-         COMMAND tools-portscan --host 127.0.0.1:10443 --user root --password root
+         COMMAND tools-portscan --host ${RC_TEST_HOST} --user root --password root
                  --accept-new-cert --target 127.0.0.1 --ports 22,9999
                  --expect-open 22 --expect-closed 9999)
 set_tests_properties(tools-portscan PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 60)
@@ -154,14 +154,15 @@ set_tests_properties(tools-portscan PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 60)
 add_executable(torch-traffic torch_traffic.cpp)
 target_link_libraries(torch-traffic PRIVATE router-console-core)
 add_test(NAME torch-traffic
-         COMMAND torch-traffic --host 127.0.0.1:10443 --user root --password root
-                 --accept-new-cert --expect-host 192.168.77.2 --samples 6 --min-rate 100000)
+         COMMAND torch-traffic --host ${RC_TEST_HOST} --user root --password root
+                 --accept-new-cert --ssh-port ${RC_TEST_SSH_PORT}
+                 --expect-host 192.168.77.2 --samples 6 --min-rate 100000)
 set_tests_properties(torch-traffic PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 90)
 
 add_executable(files-roundtrip files_roundtrip.cpp)
 target_link_libraries(files-roundtrip PRIVATE router-console-core)
 add_test(NAME files-roundtrip
-         COMMAND files-roundtrip --host 127.0.0.1:10443 --user root --password root
+         COMMAND files-roundtrip --host ${RC_TEST_HOST} --user root --password root
                  --accept-new-cert --list-dir /etc/config)
 set_tests_properties(files-roundtrip PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 90)
 
@@ -170,7 +171,7 @@ set_tests_properties(files-roundtrip PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 90)
 add_executable(sysupgrade-check sysupgrade_check.cpp)
 target_link_libraries(sysupgrade-check PRIVATE router-console-core)
 add_test(NAME sysupgrade-check
-         COMMAND sysupgrade-check --host 127.0.0.1:10443 --user root --password root
+         COMMAND sysupgrade-check --host ${RC_TEST_HOST} --user root --password root
                  --accept-new-cert)
 set_tests_properties(sysupgrade-check PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 60)
 
@@ -179,7 +180,7 @@ set_tests_properties(sysupgrade-check PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 60)
 add_executable(sqm-stats sqm_stats.cpp)
 target_link_libraries(sqm-stats PRIVATE router-console-core)
 add_test(NAME sqm-stats
-         COMMAND sqm-stats --host 127.0.0.1:10443 --user root --password root
+         COMMAND sqm-stats --host ${RC_TEST_HOST} --user root --password root
                  --accept-new-cert --section eth1 --device eth1)
 set_tests_properties(sqm-stats PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 180)
 
@@ -225,10 +226,10 @@ add_executable(routing-views routing_views.cpp)
 target_link_libraries(routing-views PRIVATE router-console-core)
 
 foreach(mode routes ospf bgp config)
-    # Host/user come from vm_fixture defaults, overridable with RC_VM_HOST /
-    # RC_VM_USER / RC_VM_PASS so one lab copy can be tested on another port.
+    # Host comes from the configure-time RC_TEST_HOST (a private VM copy on other
+    # forwards); user/password stay on the vm_fixture defaults.
     add_test(NAME routing-${mode}
-             COMMAND routing-views --mode ${mode} --accept-new-cert)
+             COMMAND routing-views --mode ${mode} --host ${RC_TEST_HOST} --accept-new-cert)
     set_tests_properties(routing-${mode} PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 180)
 endforeach()
 
@@ -239,3 +240,18 @@ add_executable(m14-terminal m14_terminal.cpp)
 target_link_libraries(m14-terminal PRIVATE router-console-core)
 add_test(NAME m14-terminal COMMAND m14-terminal --accept-new-cert)
 set_tests_properties(m14-terminal PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 120)
+
+# --- Milestone 15: MDI shell -------------------------------------------------
+# Cascade/tile/clamp math plus the QSettings store: geometry written by one
+# process has to come back in the next one, and a remembered rect must stay
+# reachable on a smaller desktop. No router involved.
+add_executable(m15-mdi-geometry m15_mdi_geometry.cpp)
+target_link_libraries(m15-mdi-geometry PRIVATE router-console-core)
+add_test(NAME m15-mdi-geometry COMMAND m15-mdi-geometry)
+set_tests_properties(m15-mdi-geometry PROPERTIES TIMEOUT 30)
+
+# The views must stay frame content rather than top-level windows, and the tree
+# must stay the launcher.
+add_test(NAME m15-mdi-structure
+         COMMAND ${CMAKE_SOURCE_DIR}/tests/m15_mdi_structure.sh ${CMAKE_SOURCE_DIR})
+set_tests_properties(m15-mdi-structure PROPERTIES TIMEOUT 30)

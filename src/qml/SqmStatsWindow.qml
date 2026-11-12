@@ -6,16 +6,15 @@ import QtQuick.Layouts
 import RouterConsole
 
 // SQM/CAKE stats window: the qdisc tree the router reports, cake tins expanded.
-Window {
+Rectangle {
     id: win
 
-    width: 780
-    height: 520
-    minimumWidth: 520
-    minimumHeight: 320
-    title: qsTr("SQM / CAKE stats")
+    implicitWidth: 780
+    implicitHeight: 520
+    property int minimumWidth: 520
+    property int minimumHeight: 320
+    property string windowTitle: qsTr("SQM / CAKE stats")
     color: "#1e1e1e"
-    visible: true
     property string toolId: ""
 
     readonly property var tool: AppEngine.sqmStatsTool

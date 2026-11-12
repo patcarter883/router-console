@@ -8,16 +8,15 @@ import RouterConsole
 // Routing table window: every candidate of every prefix FRR reports, plus the
 // kernel IPv6 routes it does not carry. Manual refresh by default; 1 Hz is
 // opt-in because every refresh is three exec calls on the router.
-Window {
+Rectangle {
     id: win
 
-    width: 980
-    height: 620
-    minimumWidth: 640
-    minimumHeight: 360
-    title: qsTr("Routing table")
+    implicitWidth: 980
+    implicitHeight: 620
+    property int minimumWidth: 640
+    property int minimumHeight: 360
+    property string windowTitle: qsTr("Routing table")
     color: "#1e1e1e"
-    visible: true
     property string viewId: ""
 
     readonly property var tool: AppEngine.routesTool

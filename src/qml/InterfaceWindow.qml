@@ -8,19 +8,18 @@ import RouterConsole
 
 // One interface tool window: identity fields, live rates and the rolling graph.
 // Data comes from InterfacesModel; the window only reads.
-Window {
+Rectangle {
     id: win
 
     property string ifName: ""
     property var detail: ({})
 
-    width: 760
-    height: 480
-    minimumWidth: 480
-    minimumHeight: 320
-    title: qsTr("Interface %1").arg(ifName)
+    implicitWidth: 760
+    implicitHeight: 480
+    property int minimumWidth: 480
+    property int minimumHeight: 320
+    property string windowTitle: qsTr("Interface %1").arg(ifName)
     color: "#1e1e1e"
-    visible: true
 
     function refresh() {
         detail = AppEngine.interfaces.interfaceData(ifName)

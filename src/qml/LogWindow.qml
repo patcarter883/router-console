@@ -6,16 +6,15 @@ import QtQuick.Layouts
 import RouterConsole
 
 // Log viewer: a polled `logread` window, new lines appended by the tool.
-Window {
+Rectangle {
     id: win
 
-    width: 980
-    height: 620
-    minimumWidth: 640
-    minimumHeight: 360
-    title: qsTr("Log")
+    implicitWidth: 980
+    implicitHeight: 620
+    property int minimumWidth: 640
+    property int minimumHeight: 360
+    property string windowTitle: qsTr("Log")
     color: "#1e1e1e"
-    visible: true
     property string toolId: ""
 
     readonly property var tool: AppEngine.logTool

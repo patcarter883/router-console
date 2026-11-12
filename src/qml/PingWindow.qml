@@ -6,16 +6,15 @@ import QtQuick.Layouts
 import RouterConsole
 
 // Ping tool window: echoes run on the router, replies arrive typed.
-Window {
+Rectangle {
     id: win
 
-    width: 620
-    height: 420
-    minimumWidth: 420
-    minimumHeight: 260
-    title: qsTr("Ping")
+    implicitWidth: 620
+    implicitHeight: 420
+    property int minimumWidth: 420
+    property int minimumHeight: 260
+    property string windowTitle: qsTr("Ping")
     color: "#1e1e1e"
-    visible: true
     property string toolId: ""
 
     readonly property var tool: AppEngine.pingTool

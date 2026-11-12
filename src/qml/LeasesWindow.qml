@@ -7,16 +7,15 @@ import RouterConsole
 
 // DHCP leases: live dnsmasq/odhcpd leases merged with the `config host`
 // reservations, one row per address.
-Window {
+Rectangle {
     id: win
 
-    width: 900
-    height: 520
-    minimumWidth: 600
-    minimumHeight: 320
-    title: qsTr("DHCP leases")
+    implicitWidth: 900
+    implicitHeight: 520
+    property int minimumWidth: 600
+    property int minimumHeight: 320
+    property string windowTitle: qsTr("DHCP leases")
     color: "#1e1e1e"
-    visible: true
     property string toolId: ""
 
     readonly property var tool: AppEngine.leaseTool

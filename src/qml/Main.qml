@@ -6,6 +6,10 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import RouterConsole
 
+// WinBox-parity shell: the tree on the left is the launcher, the area on the
+// right is an MDI desktop. Every view opens as a frame in that desktop, so
+// several stay live at once; the frames own position, size and z-order and
+// remember their geometry across restarts.
 ApplicationWindow {
     id: root
     width: 1280
@@ -13,28 +17,23 @@ ApplicationWindow {
     visible: true
     title: qsTr("router-console")
 
-    // Tree state and the tool windows it opens (one per interface, one per
-    // config domain, one per tool-tier window).
     property bool interfacesExpanded: true
     property bool configExpanded: true
     property bool pluginsExpanded: true
-    property bool startupWindowOpened: false
-    property bool startupConfigOpened: false
-    property bool startupPluginOpened: false
-    property var interfaceWindows: []
-    property var configWindows: []
-    property var pluginWindows: []
     property bool routingExpanded: true
-    property bool startupRoutingOpened: false
-    property var routingWindows: []
+    property bool toolsExpanded: true
+
+    // Open frames, oldest first. Each frame carries its stable windowKey.
+    property var mdiWindows: []
+    // Scalar mirror of mdiWindows.length: var-array mutations do not notify.
+    property int openCount: 0
+    property bool startupApplied: false
+
     readonly property var routingViews: [
         { id: "routes", title: qsTr("Routes") },
         { id: "ospf", title: qsTr("OSPF") },
         { id: "bgp", title: qsTr("BGP") }
     ]
-    property bool toolsExpanded: true
-    property bool startupToolOpened: false
-    property var toolWindows: []
     readonly property var tools: [
         { id: "ping", title: qsTr("Ping") },
         { id: "traceroute", title: qsTr("Traceroute") },
@@ -47,143 +46,137 @@ ApplicationWindow {
         { id: "leases", title: qsTr("DHCP leases") },
         { id: "backup", title: qsTr("Config backup") }
     ]
-    readonly property string startupInterface:
-        typeof startupInterfaceName === "undefined" ? "" : startupInterfaceName
-    readonly property string startupConfig:
-        typeof startupConfigDomain === "undefined" ? "" : startupConfigDomain
-    readonly property string startupConfigSectionName:
-        typeof startupConfigSection === "undefined" ? "" : startupConfigSection
-    readonly property string startupRouting:
-        typeof startupRoutingId === "undefined" ? "" : startupRoutingId
-    readonly property string startupTool:
-        typeof startupToolId === "undefined" ? "" : startupToolId
-    readonly property string startupStage:
+
+    // Context properties from main.cpp (--open-* flags). Named with a boot*
+    // prefix so no property shadows the import it reads.
+    readonly property var bootInterfaces:
+        typeof startupInterfaces === "undefined" ? [] : startupInterfaces
+    readonly property var bootConfigs:
+        typeof startupConfigDomains === "undefined" ? [] : startupConfigDomains
+    readonly property var bootRouting:
+        typeof startupRoutingIds === "undefined" ? [] : startupRoutingIds
+    readonly property var bootTools:
+        typeof startupTools === "undefined" ? [] : startupTools
+    readonly property var bootPlugins:
+        typeof startupPlugins === "undefined" ? [] : startupPlugins
+    readonly property string bootLayout:
+        typeof startupMdiLayout === "undefined" ? "" : startupMdiLayout
+    readonly property string bootStage:
         typeof startupStageValue === "undefined" ? "" : startupStageValue
-    readonly property string startupPlugin:
-        typeof startupPluginId === "undefined" ? "" : startupPluginId
 
-    function openConfig(domainId, initialSection) {
-        for (let i = 0; i < configWindows.length; ++i) {
-            if (configWindows[i].domainId === domainId) {
-                configWindows[i].requestActivate()
-                return configWindows[i]
-            }
+    // --- MDI window manager ------------------------------------------------
+
+    function findWindow(key) {
+        for (let i = 0; i < mdiWindows.length; ++i) {
+            if (mdiWindows[i].windowKey === key)
+                return mdiWindows[i]
         }
-        const window = configWindowComponent.createObject(root, {
-            domainId: domainId,
-            initialSection: initialSection || ""
+        return null
+    }
+
+    function openWindow(key, title, component, props) {
+        const existing = findWindow(key)
+        if (existing) {
+            existing.raise()
+            return existing
+        }
+        const slot = mdiWindows.length % 8
+        const frame = frameComponent.createObject(mdiArea, {
+            windowKey: key,
+            fallbackTitle: title,
+            contentComponent: component,
+            contentProperties: props || ({}),
+            initialRect: Qt.rect(20 + slot * 26, 20 + slot * 26, 0, 0)
         })
-        if (!window)
+        if (!frame)
             return null
-        configWindows.push(window)
-        window.closing.connect(function () {
-            const index = root.configWindows.indexOf(window)
-            if (index >= 0)
-                root.configWindows.splice(index, 1)
-        })
-        return window
+        frame.closed.connect(function (closedKey) { root.dropWindow(closedKey) })
+        mdiWindows.push(frame)
+        root.openCount = mdiWindows.length
+        return frame
     }
 
-    function closeConfigWindows() {
-        while (configWindows.length > 0)
-            configWindows.pop().close()
-    }
-
-    function openInterface(name) {
-        for (let i = 0; i < interfaceWindows.length; ++i) {
-            if (interfaceWindows[i].ifName === name) {
-                interfaceWindows[i].requestActivate()
+    function dropWindow(key) {
+        for (let i = 0; i < mdiWindows.length; ++i) {
+            if (mdiWindows[i] && mdiWindows[i].windowKey === key) {
+                mdiWindows.splice(i, 1)
+                root.openCount = mdiWindows.length
                 return
             }
         }
-        const window = interfaceWindowComponent.createObject(root, { ifName: name })
-        if (!window)
-            return
-        interfaceWindows.push(window)
-        window.closing.connect(function () {
-            const index = root.interfaceWindows.indexOf(window)
-            if (index >= 0)
-                root.interfaceWindows.splice(index, 1)
-        })
     }
 
-    function closeInterfaceWindows() {
-        while (interfaceWindows.length > 0)
-            interfaceWindows.pop().close()
+    function closeAllWindows() {
+        const frames = mdiWindows.slice()
+        mdiWindows = []
+        root.openCount = 0
+        for (let i = 0; i < frames.length; ++i)
+            frames[i].closeFrame()
+    }
+
+    function cascadeWindows() {
+        if (mdiWindows.length === 0)
+            return
+        const rects = MdiGeometry.cascade(mdiWindows.length,
+                                          Qt.rect(0, 0, mdiArea.width, mdiArea.height),
+                                          Qt.size(360, 240))
+        for (let i = 0; i < mdiWindows.length; ++i)
+            mdiWindows[i].applyRect(rects[i])
+    }
+
+    function tileWindows() {
+        if (mdiWindows.length === 0)
+            return
+        const rects = MdiGeometry.tile(mdiWindows.length,
+                                       Qt.rect(0, 0, mdiArea.width, mdiArea.height))
+        for (let i = 0; i < mdiWindows.length; ++i)
+            mdiWindows[i].applyRect(rects[i])
+    }
+
+    // A desktop that shrank (or a restored frame from a bigger screen) must
+    // keep every window reachable by its title bar.
+    function clampWindows() {
+        if (mdiArea.width < 80 || mdiArea.height < 80)
+            return
+        for (let i = 0; i < mdiWindows.length; ++i) {
+            const frame = mdiWindows[i]
+            frame.width = Math.min(Math.max(frame.minimumFrameWidth, frame.width), mdiArea.width)
+            frame.height = Math.min(Math.max(frame.minimumFrameHeight, frame.height), mdiArea.height)
+            frame.x = Math.max(0, Math.min(frame.x, mdiArea.width - 60))
+            frame.y = Math.max(0, Math.min(frame.y, mdiArea.height - frame.titleBarHeight - 8))
+        }
+    }
+
+    // --- View openers ------------------------------------------------------
+
+    function openInterface(name) {
+        return openWindow("interface/" + name, qsTr("Interface %1").arg(name),
+                          interfaceWindowComponent, { ifName: name })
+    }
+
+    function openConfig(domainId, initialSection) {
+        return openWindow("config/" + domainId, qsTr("Config — %1").arg(domainId),
+                          configWindowComponent,
+                          { domainId: domainId, initialSection: initialSection || "" })
     }
 
     function openPlugin(pluginId) {
-        for (let i = 0; i < pluginWindows.length; ++i) {
-            if (pluginWindows[i].pluginId === pluginId) {
-                pluginWindows[i].requestActivate()
-                return
-            }
-        }
-        const window = pluginWindowComponent.createObject(root, { pluginId: pluginId })
-        if (!window)
-            return
-        pluginWindows.push(window)
-        window.closing.connect(function () {
-            const index = root.pluginWindows.indexOf(window)
-            if (index >= 0)
-                root.pluginWindows.splice(index, 1)
-        })
+        return openWindow("plugin/" + pluginId, pluginId, pluginWindowComponent,
+                          { pluginId: pluginId })
     }
 
-    function closePluginWindows() {
-        while (pluginWindows.length > 0)
-            pluginWindows.pop().close()
-    }
-
-    Component {
-        id: pluginWindowComponent
-        PluginWindow {}
-    }
-
-    // One window per tool id; reopening focuses the existing one.
     function openTool(toolId) {
-        for (let i = 0; i < toolWindows.length; ++i) {
-            if (toolWindows[i].toolId === toolId) {
-                toolWindows[i].requestActivate()
-                return toolWindows[i]
-            }
-        }
         const component = toolComponent(toolId)
         if (!component)
             return null
-        const window = component.createObject(root, { toolId: toolId })
-        if (!window)
-            return null
-        toolWindows.push(window)
-        window.closing.connect(function () {
-            const index = root.toolWindows.indexOf(window)
-            if (index >= 0)
-                root.toolWindows.splice(index, 1)
-        })
-        return window
+        return openWindow("tool/" + toolId, toolId, component, { toolId: toolId })
     }
 
-    // One window per routing view; reopening focuses the existing one.
     function openRouting(viewId) {
-        for (let i = 0; i < routingWindows.length; ++i) {
-            if (routingWindows[i].viewId === viewId) {
-                routingWindows[i].requestActivate()
-                return routingWindows[i]
-            }
-        }
         const component = routingComponent(viewId)
         if (!component)
             return null
-        const window = component.createObject(root, { viewId: viewId })
-        if (!window)
-            return null
-        routingWindows.push(window)
-        window.closing.connect(function () {
-            const index = root.routingWindows.indexOf(window)
-            if (index >= 0)
-                root.routingWindows.splice(index, 1)
-        })
-        return window
+        return openWindow("routing/" + viewId, viewId, component, { viewId: viewId })
     }
 
     function routingComponent(viewId) {
@@ -194,15 +187,6 @@ ApplicationWindow {
         }
         return null
     }
-
-    function closeRoutingWindows() {
-        while (routingWindows.length > 0)
-            routingWindows.pop().close()
-    }
-
-    Component { id: routesWindowComponent; RoutesWindow {} }
-    Component { id: ospfWindowComponent; OspfWindow {} }
-    Component { id: bgpWindowComponent; BgpWindow {} }
 
     function toolComponent(toolId) {
         switch (toolId) {
@@ -220,11 +204,33 @@ ApplicationWindow {
         return null
     }
 
-    function closeToolWindows() {
-        while (toolWindows.length > 0)
-            toolWindows.pop().close()
+    function applyStartupWindows() {
+        for (let i = 0; i < bootInterfaces.length; ++i)
+            root.openInterface(bootInterfaces[i])
+        for (let i = 0; i < bootConfigs.length; ++i) {
+            const frame = root.openConfig(bootConfigs[i], "")
+            if (frame && bootStage.length > 0 && frame.content)
+                frame.content.stageAfterLoad = bootStage
+        }
+        for (let i = 0; i < bootRouting.length; ++i)
+            root.openRouting(bootRouting[i])
+        for (let i = 0; i < bootTools.length; ++i)
+            root.openTool(bootTools[i])
+        for (let i = 0; i < bootPlugins.length; ++i)
+            root.openPlugin(bootPlugins[i])
+        if (bootLayout === "tile")
+            root.tileWindows()
+        else if (bootLayout === "cascade")
+            root.cascadeWindows()
     }
 
+    Component { id: frameComponent; MdiWindowFrame {} }
+    Component { id: interfaceWindowComponent; InterfaceWindow {} }
+    Component { id: configWindowComponent; ConfigWindow {} }
+    Component { id: pluginWindowComponent; PluginWindow {} }
+    Component { id: routesWindowComponent; RoutesWindow {} }
+    Component { id: ospfWindowComponent; OspfWindow {} }
+    Component { id: bgpWindowComponent; BgpWindow {} }
     Component { id: pingWindowComponent; PingWindow {} }
     Component { id: tracerouteWindowComponent; TracerouteWindow {} }
     Component { id: portScanWindowComponent; PortScanWindow {} }
@@ -236,16 +242,6 @@ ApplicationWindow {
     Component { id: leasesWindowComponent; LeasesWindow {} }
     Component { id: backupWindowComponent; BackupWindow {} }
 
-    Component {
-        id: interfaceWindowComponent
-        InterfaceWindow {}
-    }
-
-    Component {
-        id: configWindowComponent
-        ConfigWindow {}
-    }
-
     header: ToolBar {
         RowLayout {
             anchors.fill: parent
@@ -255,6 +251,31 @@ ApplicationWindow {
                 Layout.leftMargin: 8
             }
             Item { Layout.fillWidth: true }
+            Label {
+                objectName: "windowCount"
+                text: qsTr("%1 window(s)").arg(root.openCount)
+                color: "#a0a0a0"
+                font.pixelSize: 11
+                Layout.rightMargin: 8
+            }
+            Button {
+                objectName: "cascadeButton"
+                text: qsTr("Cascade")
+                enabled: root.openCount > 0
+                onClicked: root.cascadeWindows()
+            }
+            Button {
+                objectName: "tileButton"
+                text: qsTr("Tile")
+                enabled: root.openCount > 0
+                onClicked: root.tileWindows()
+            }
+            Button {
+                objectName: "closeAllButton"
+                text: qsTr("Close all")
+                enabled: root.openCount > 0
+                onClicked: root.closeAllWindows()
+            }
             Button {
                 text: qsTr("Connect…")
                 onClicked: connectDialog.open()
@@ -267,9 +288,6 @@ ApplicationWindow {
         }
     }
 
-    // WinBox-parity shell: left tree of domains, main area hosts the board card
-    // until a tool window covers it. Interfaces expand into their list; each
-    // entry opens its own live graph window.
     RowLayout {
         anchors.fill: parent
         spacing: 0
@@ -627,6 +645,8 @@ ApplicationWindow {
             }
         }
 
+        // The MDI desktop. The board card is the wallpaper until frames cover
+        // it; frames live above it and are the only movable children.
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -684,6 +704,26 @@ ApplicationWindow {
                     }
                 }
             }
+
+            Label {
+                anchors.centerIn: parent
+                anchors.verticalCenterOffset: 120
+                visible: AppEngine.connected && root.openCount === 0
+                text: qsTr("Open a view from the tree — several can stay open at once")
+                color: "#6f6f6f"
+                font.pixelSize: 13
+            }
+
+            Item {
+                id: mdiArea
+                objectName: "mdiArea"
+                anchors.fill: parent
+                clip: true
+                property int topZ: 1
+
+                onWidthChanged: root.clampWindows()
+                onHeightChanged: root.clampWindows()
+            }
         }
     }
 
@@ -703,35 +743,13 @@ ApplicationWindow {
         target: AppEngine
         function onStateChanged() {
             if (!AppEngine.connected) {
-                root.closeInterfaceWindows()
-                root.closeConfigWindows()
-                root.closePluginWindows()
-                root.closeRoutingWindows()
-                root.closeToolWindows()
+                root.closeAllWindows()
                 return
             }
             connectDialog.close()
-            if (root.startupInterface.length > 0 && !root.startupWindowOpened) {
-                root.startupWindowOpened = true
-                root.openInterface(root.startupInterface)
-            }
-            if (root.startupPlugin.length > 0 && !root.startupPluginOpened) {
-                root.startupPluginOpened = true
-                root.openPlugin(root.startupPlugin)
-            }
-            if (root.startupConfig.length > 0 && !root.startupConfigOpened) {
-                root.startupConfigOpened = true
-                const window = root.openConfig(root.startupConfig, root.startupConfigSectionName)
-                if (window && root.startupStage.length > 0)
-                    window.stageAfterLoad = root.startupStage
-            }
-            if (root.startupRouting.length > 0 && !root.startupRoutingOpened) {
-                root.startupRoutingOpened = true
-                root.openRouting(root.startupRouting)
-            }
-            if (root.startupTool.length > 0 && !root.startupToolOpened) {
-                root.startupToolOpened = true
-                root.openTool(root.startupTool)
+            if (!root.startupApplied) {
+                root.startupApplied = true
+                root.applyStartupWindows()
             }
         }
     }

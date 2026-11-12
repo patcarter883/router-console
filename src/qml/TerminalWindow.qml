@@ -8,16 +8,15 @@ import RouterConsole
 // Console for one router: each Enter is a single /bin/sh -c over rpcd file exec
 // (no tty on that surface), so the header says what the window does and the
 // prompt shows the directory the window is carrying.
-Window {
+Rectangle {
     id: win
 
-    width: 980
-    height: 620
-    minimumWidth: 640
-    minimumHeight: 360
-    title: qsTr("Terminal")
+    implicitWidth: 980
+    implicitHeight: 620
+    property int minimumWidth: 640
+    property int minimumHeight: 360
+    property string windowTitle: qsTr("Terminal")
     color: "#1e1e1e"
-    visible: true
     property string toolId: ""
 
     readonly property var tool: AppEngine.terminalTool
