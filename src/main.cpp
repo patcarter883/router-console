@@ -30,6 +30,9 @@ int main(int argc, char *argv[])
     const QCommandLineOption interfaceOption("open-interface",
                                              "open the graph window for this interface on connect",
                                              "name");
+    const QCommandLineOption interfaceRangeOption(
+        "interface-range", "time range of the opened interface graph (1m, 10m, 1h, 24h)",
+        "range", "10m");
     const QCommandLineOption configOption("open-config",
                                           "open the config editor for this domain on connect",
                                           "domain");
@@ -52,8 +55,8 @@ int main(int argc, char *argv[])
                                           "arrange the opened windows on connect (tile, cascade)",
                                           "layout");
     parser.addOptions({hostOption, userOption, passwordOption, trustOption, interfaceOption,
-                       configOption, configSectionOption, stageOption, pluginOption, routingOption,
-                       toolOption, layoutOption});
+                       interfaceRangeOption, configOption, configSectionOption, stageOption,
+                       pluginOption, routingOption, toolOption, layoutOption});
     parser.process(app);
 
     auto *engine = new AppEngine(&app);
@@ -70,6 +73,8 @@ int main(int argc, char *argv[])
 
     QQmlApplicationEngine qml;
     qml.rootContext()->setContextProperty("startupInterfaces", parser.values(interfaceOption));
+    qml.rootContext()->setContextProperty("startupInterfaceRange",
+                                          parser.value(interfaceRangeOption));
     qml.rootContext()->setContextProperty("startupConfigDomains", parser.values(configOption));
     qml.rootContext()->setContextProperty("startupConfigSection",
                                           parser.value(configSectionOption));
