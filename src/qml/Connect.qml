@@ -19,8 +19,74 @@ Dialog {
         AppEngine.connectTo(hostField.text, "", userField.text, passwordField.text)
     }
 
+    function useDiscovered(target) {
+        hostField.text = target
+        passwordField.forceActiveFocus()
+    }
+
     contentItem: ColumnLayout {
         spacing: 12
+
+        // Auto-discovery: routers announced on the local segment (mDNS). The
+        // list is advisory — manual entry below always works.
+        Frame {
+            Layout.fillWidth: true
+            background: Rectangle {
+                color: "#252525"
+                radius: 4
+                border.color: "#3a3a3a"
+            }
+
+            ColumnLayout {
+                spacing: 4
+                Layout.fillWidth: true
+
+                Label {
+                    text: AppEngine.discoveredCount > 0
+                          ? qsTr("Discovered routers (%1)").arg(AppEngine.discoveredCount)
+                          : qsTr("Searching the local network…")
+                    font.bold: true
+                    color: "#c8c8c8"
+                }
+
+                ListView {
+                    id: discoveredList
+                    objectName: "discoveredList"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(contentHeight, 132)
+                    visible: AppEngine.discoveredCount > 0
+                    clip: true
+                    model: AppEngine.discoveredHosts
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    delegate: ItemDelegate {
+                        required property string hostname
+                        required property string address
+                        required property int port
+                        required property string target
+                        required property string services
+
+                        width: discoveredList.width
+                        height: 44
+                        onClicked: dialog.useDiscovered(target)
+
+                        contentItem: ColumnLayout {
+                            spacing: 0
+                            Label {
+                                text: hostname
+                                font.bold: true
+                            }
+                            Label {
+                                text: address + (port === 443 ? "" : ":" + port)
+                                      + (services.length > 0 ? "  ·  " + services : "")
+                                color: "#9a9a9a"
+                                font.pixelSize: 11
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         GridLayout {
             columns: 2

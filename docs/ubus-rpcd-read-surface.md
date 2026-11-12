@@ -9,17 +9,77 @@ fallback and is fine for a first pass.
 
 ## Router auto-discovery (connect window)
 
-WinBox discovers routers with MNDP; the OpenWrt equivalent is `umdns` (mDNS-based,
-UDP multicast on the LAN). Mechanism: client joins the multicast group and listens
-for OpenWrt service announcements; discovered routers appear in the connect window
-with hostname + IP, one click to prefill.
+WinBox discovers routers with MNDP; the OpenWrt equivalent is `umdns` (mDNS,
+UDP multicast on the LAN, RFC 6762). Mechanism: the client joins 224.0.0.251,
+parses the responder records and lists routers in the connect window with
+hostname + IP, one click to prefill the connect form.
 
-- Do NOT hardcode service record names from memory: bring up the VM with umdns
-  enabled, capture the actual announcements (`tcpdump -i br-lan udp port 5353`),
-  and write the record names/TXT fields observed into this doc. Then implement
-  the listener against the measured records.
-- Discovery must degrade silently: no umdns => manual address entry (already the
-  fallback in Connect.qml). Never block connect on discovery.
+### Measured records (umdns 2026.10.04~defe7ccf-r1 on 25.12.6, 2026-11-12)
+
+Captured on the lab segment with the guest's umdns enabled — not from memory.
+`scripts/mdns-probe.py --listen` decodes them; `scripts/mdns-probe.py <name>:<type>`
+sends a query:
+
+| record | value | TTL |
+| --- | --- | --- |
+| `openwrt-dev.local` A | `192.168.78.1` | 4500 |
+| `openwrt-dev.local` AAAA | `fe80::5054:ff:fe12:3458` (link-local) | 4500 |
+| `_services._dns-sd._udp.local` PTR | `_ssh._tcp.local` | 4500 |
+| `_ssh._tcp.local` PTR | `ssh_22._ssh._tcp.local` (from `ubus call umdns announcements`) | — |
+| `ssh_22._ssh._tcp.local` SRV | port 22, target `openwrt-dev.local` | — |
+| `ssh_22._ssh._tcp.local` TXT | `daemon=dropbear` | — |
+
+The hostname is the A record's first label (`openwrt-dev`), and the IP is the
+address on the segment the client is listening on. The service set comes from
+dropbear registering `_ssh._tcp` with umdns; a router with more daemons
+announcing will show more PTRs.
+
+### umdns is announce-only (measured)
+
+- It sends its records **once at start-up** (probe + unsolicited response, then
+  it is silent). 70 s and 4-minute captures on the lab segment after a restart
+  showed no further announcements.
+- It **does not answer queries**: `_services._dns-sd._udp.local` PTR,
+  `_ssh._tcp.local` PTR/ANY, `openwrt-dev.local` A/ANY, QM and QU classes, from
+  port 5353 and from an ephemeral port, unicast to `192.168.78.1:5353`, with
+  `jail` on and off — the queries arrive at the guest (tcpdump on its `eth2`)
+  and nothing comes back.
+- `ubus call umdns update|reload`, `set_config`, SIGHUP and SIGUSR1 do not
+  re-announce either.
+
+Consequence: a client that starts more than a few seconds after the router
+booted would never see it. The dev VM therefore runs
+`/etc/init.d/umdns-announce` (installed by `scripts/vm-discovery-setup.sh`),
+which restarts umdns every 5 s so the announcements recur — measured at 5 s
+intervals. That is a router-side deployment decision, not client magic: the
+client stays a plain mDNS listener and a managed router fleet should either run
+the same timer or a responder that answers queries.
+
+### Client
+
+`src/protocol/MdnsDiscovery.cpp` (worker thread, `QUdpSocket`):
+
+- binds `0.0.0.0:5353` with `ShareAddress|ReuseAddressHint` (avahi holds the
+  port on developer desktops) and joins 224.0.0.251 per interface;
+- parses A (hostname + IPv4), PTR (service enumeration) and SRV (port, service)
+  records, attributes a service type to the responder's address, and skips
+  addresses that belong to the client itself — avahi on the client announces
+  its own name on every segment, including the lab one;
+- sends a `_services._dns-sd._udp.local` browse query every 5 s for responders
+  that do answer, so discovery also works where umdns's silence is replaced by
+  a query-capable responder;
+- feeds `DiscoveredHostsModel`, exposed to QML as `AppEngine.discoveredHosts`
+  with `hostname`/`address`/`port`/`target`/`services` roles. Routers rank
+  first (dropbear's `_ssh._tcp`, demoted for consumer mDNS service types), the
+  list is capped in the dialog and scrolling.
+
+Discovery must degrade silently: no umdns, no multicast or no interface =>
+empty list, manual address entry (the fields below the list) always works.
+Connecting never waits for discovery.
+
+Measured: `DISCOVERED openwrt-dev 192.168.78.1:443 after 808 ms` on a warm
+segment and 3.4 s on a clean start after boot (see docs/dev-vm-recipe.md).
+
 
 ## System / board
 
