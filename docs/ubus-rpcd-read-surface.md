@@ -431,6 +431,7 @@ declares which in its manifest (docs/plugins.md):
 | rist2rist | `service list {"name":"rist2rist"}` | `{ "rist2rist": { "instances": { "instance1": { "running": true, "pid": ... } } } }`; `[0]` with no object when not running |
 | rist2rist | `uci get {"config":"rist2rist"}` | `{"values":{"main":{".type":"rist2rist","listen_url":...,"profile":...},"wan_a":{".type":"destination","address":...,"weight":...}}}` |
 | modemaim | `modemaim status` | `ts,state,pstate,plmn,operator,tech,mapped{site,conf,source},rssi,rsrp,rsrq,sinr,serving{pci,earfcn,rsrp,rsrq,ta,ta_us,eci},neighbors[],atNeighbors[]` |
+| modemaim | `modemaim signal` | `ts,rssi,rsrp,rsrq,sinr` (+ `calibrating:true` while rist2rist calibrates) — one MBIM query, the fast lane; empty strings are the honest "no reading" |
 | modemaim | `modemaim origin` | `{"lat":...,"lon":...,"confirmed":...}` |
 | modemaim | `GET /luci-static/resources/modemaim/towers.json` | `{source,generated,data_date,bbox,towers[{site,lat,lon,band,mhz,bw,eirp,h,azs,hbw,carrier}]}` — static by design: over the 1 MiB ubus cap rpcd drops the whole object |
 | nettime | `nettime status` (the client's shim) | `{ts,enabled,port,clock,provider,uptime,clients}` — **mock**: the packaged app exposes only the UDP 5637 GstNetTime provider, no rpcd object |
