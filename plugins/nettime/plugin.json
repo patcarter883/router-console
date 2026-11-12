@@ -17,7 +17,7 @@
       "transport": "ubus",
       "object": "service",
       "method": "list",
-      "args": { "name": "jxs-nettime" }
+      "args": { "name": "nettime" }
     }
   ]
 }

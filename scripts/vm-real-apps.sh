@@ -27,8 +27,8 @@ cd "$(dirname "$0")/.."
 
 SSHP=${SSHP:-10022}
 SDK26=${SDK26:-/home/pat/code/openwrt/openwrt-sdk-25.12.6-x86-64_gcc-14.3.0_musl.Linux-x86_64}
-# nettime was last built in the 25.12.4 SDK; its source has not changed
-# since, so that apk is kept in ~/code/openwrt/artifacts (see docs/plugins.md).
+# nettime builds from the in-repo source at openwrt/nettime (see docs/plugins.md);
+# a prebuilt apk also sits in ~/code/openwrt/artifacts.
 ARTIFACTS=${ARTIFACTS:-/home/pat/code/openwrt/artifacts}
 RIST_APK=${RIST_APK:-}
 NETTIME_APK=${NETTIME_APK:-}
