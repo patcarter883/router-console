@@ -10,6 +10,41 @@ ApplicationWindow {
     visible: true
     title: qsTr("router-console")
 
+    // Interfaces tree state and the tool windows it opens (one per interface).
+    property bool interfacesExpanded: true
+    property bool startupWindowOpened: false
+    property var interfaceWindows: []
+    readonly property string startupInterface:
+        typeof startupInterfaceName === "undefined" ? "" : startupInterfaceName
+
+    function openInterface(name) {
+        for (let i = 0; i < interfaceWindows.length; ++i) {
+            if (interfaceWindows[i].ifName === name) {
+                interfaceWindows[i].requestActivate()
+                return
+            }
+        }
+        const window = interfaceWindowComponent.createObject(root, { ifName: name })
+        if (!window)
+            return
+        interfaceWindows.push(window)
+        window.closing.connect(function () {
+            const index = root.interfaceWindows.indexOf(window)
+            if (index >= 0)
+                root.interfaceWindows.splice(index, 1)
+        })
+    }
+
+    function closeInterfaceWindows() {
+        while (interfaceWindows.length > 0)
+            interfaceWindows.pop().close()
+    }
+
+    Component {
+        id: interfaceWindowComponent
+        InterfaceWindow {}
+    }
+
     header: ToolBar {
         RowLayout {
             anchors.fill: parent
@@ -31,21 +66,120 @@ ApplicationWindow {
         }
     }
 
-    // WinBox-parity shell: left tree of domains, main area hosts dockable tool
-    // windows (implemented after the connect milestone).
+    // WinBox-parity shell: left tree of domains, main area hosts the board card
+    // until a tool window covers it. Interfaces expand into their list; each
+    // entry opens its own live graph window.
     RowLayout {
         anchors.fill: parent
         spacing: 0
 
-        ListView {
-            id: domainTree
-            Layout.preferredWidth: 240
+        Rectangle {
+            Layout.preferredWidth: 250
             Layout.fillHeight: true
-            model: [qsTr("Interfaces"), qsTr("Config"), qsTr("Tools"), qsTr("Plugins")]
-            delegate: ItemDelegate {
-                required property string modelData
-                width: domainTree.width
-                text: modelData
+            color: "#252525"
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 2
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 30
+                    color: headerHover.containsMouse ? "#333333" : "transparent"
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 8
+                        text: (root.interfacesExpanded ? "\u25be  " : "\u25b8  ") + qsTr("Interfaces")
+                              + " (" + AppEngine.interfaces.count + ")"
+                        color: "#e8e8e8"
+                        font.bold: true
+                        font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                        id: headerHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: root.interfacesExpanded = !root.interfacesExpanded
+                    }
+                }
+
+                Column {
+                    id: interfaceList
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 18
+                    visible: root.interfacesExpanded
+                    spacing: 0
+
+                    Repeater {
+                        model: AppEngine.interfaces
+
+                        delegate: Rectangle {
+                            id: interfaceRow
+                            required property string ifName
+                            required property string rxRateText
+                            required property bool up
+
+                            width: interfaceList.width
+                            height: 30
+                            color: rowHover.containsMouse ? "#333333" : "transparent"
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 8
+                                spacing: 8
+
+                                Text {
+                                    text: interfaceRow.ifName
+                                    color: interfaceRow.up ? "#e8e8e8" : "#7a7a7a"
+                                    font.pixelSize: 13
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                                Text {
+                                    text: "\u2193 " + interfaceRow.rxRateText
+                                    color: "#3fbf6a"
+                                    font.pixelSize: 10
+                                }
+                            }
+
+                            MouseArea {
+                                id: rowHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: root.openInterface(interfaceRow.ifName)
+                            }
+                        }
+                    }
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 18
+                    Layout.topMargin: 4
+                    visible: root.interfacesExpanded && AppEngine.interfaces.count === 0
+                    text: AppEngine.connected ? qsTr("no interfaces") : qsTr("not connected")
+                    color: "#7a7a7a"
+                    font.pixelSize: 11
+                }
+
+                Repeater {
+                    model: [qsTr("Config"), qsTr("Tools"), qsTr("Plugins")]
+                    delegate: Text {
+                        required property string modelData
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 8
+                        Layout.topMargin: 6
+                        text: modelData
+                        color: "#6f6f6f"
+                        font.pixelSize: 13
+                    }
+                }
+
+                Item { Layout.fillHeight: true }
             }
         }
 
@@ -124,8 +258,15 @@ ApplicationWindow {
     Connections {
         target: AppEngine
         function onStateChanged() {
-            if (AppEngine.connected)
-                connectDialog.close()
+            if (!AppEngine.connected) {
+                root.closeInterfaceWindows()
+                return
+            }
+            connectDialog.close()
+            if (root.startupInterface.length > 0 && !root.startupWindowOpened) {
+                root.startupWindowOpened = true
+                root.openInterface(root.startupInterface)
+            }
         }
     }
 }

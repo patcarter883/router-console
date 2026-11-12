@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <QElapsedTimer>
 #include <QJsonObject>
+#include <QList>
 #include <QObject>
 #include <QUrl>
 
@@ -35,6 +36,8 @@ public:
 public slots:
     void login(const QUrl &endpoint, const QString &username, const QString &password);
     void fetchBoard();
+    void fetchInterfaces();
+    void fetchDeviceStatus();
     void closeSession();
 
 signals:
@@ -42,6 +45,10 @@ signals:
     void loginFailed(const Ubus::Error &error);
     void boardReceived(const Ubus::BoardInfo &board);
     void boardFailed(const Ubus::Error &error);
+    void interfacesReceived(const QList<Ubus::InterfaceInfo> &interfaces);
+    void interfacesFailed(const Ubus::Error &error);
+    void deviceStatusReceived(const Ubus::DeviceStatusSnapshot &snapshot);
+    void deviceStatusFailed(const Ubus::Error &error);
     void certificateRequired(const QString &host, const QByteArray &sha256Hex);
     void certificateRejected(const QString &reason);
 
