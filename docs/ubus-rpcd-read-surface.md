@@ -249,9 +249,12 @@ and nettime, a procd stand-in + `/etc/config/rist2rist` for rist2rist, and a
 small tower extract with the real schema. modemaim's mock answers the real
 script's keys verbatim; nettime's does not correspond to any shipped method.
 
-The client ACL (`scripts/router-console.acl.json`) grants `service list`,
-`modemaim status/origin/bearing/towers`, `nettime status` and read access to
-the `rist2rist` and `modemaim` UCI packages.
+The plugin surfaces ship as their own rpcd ACL group (`scripts/plugins.acl.json`,
+installed as `/usr/share/rpcd/acl.d/router-console-plugins.json`): `service list`,
+`modemaim status/origin/bearing/towers`, `nettime status`, and read access to
+the `rist2rist` and `modemaim` UCI packages. It is a separate file on purpose —
+`scripts/router-console.acl.json` carries the core domains and the tool tier, and
+the two are edited independently.
 
 ## Auth
 

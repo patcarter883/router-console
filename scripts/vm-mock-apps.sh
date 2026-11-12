@@ -26,6 +26,11 @@ put rpcd/nettime /usr/libexec/rpcd/nettime
 put init.d/rist2rist /etc/init.d/rist2rist
 put init.d/nettime /etc/init.d/nettime
 
+# The plugin surfaces get their own ACL group: scripts/router-console.acl.json
+# is shared with the tool-tier work, and a separate file cannot be clobbered by
+# that file being reinstalled.
+ssh_vm "cat > /usr/share/rpcd/acl.d/router-console-plugins.json" < scripts/plugins.acl.json
+
 ssh_vm 'chmod +x /usr/libexec/rpcd/modemaim /usr/libexec/rpcd/nettime \
         /etc/init.d/rist2rist /etc/init.d/nettime;
         /etc/init.d/rist2rist enable; /etc/init.d/rist2rist restart;
