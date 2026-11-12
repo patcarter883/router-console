@@ -11,6 +11,7 @@
 
 #include "vm_fixture.h"
 #include "tools/FilesTool.h"
+#include "vm_probe.h"
 
 // Tool-tier check for the file manager: list /etc/config from the router, then
 // upload a local file into /tmp, download it back and prove the bytes match.
@@ -34,6 +35,8 @@ int main(int argc, char *argv[])
     connectOptions.read(parser);
 
     QTextStream out(stdout);
+    if (const int code = skipWithoutDevVm(out, connectOptions.host))
+        return code;
     const QString listDir = parser.value(listOption);
     const QString scratchDir = parser.value(scratchOption);
     const QString remoteName = QStringLiteral("rc-roundtrip.bin");

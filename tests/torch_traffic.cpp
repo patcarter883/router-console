@@ -9,6 +9,7 @@
 
 #include "vm_fixture.h"
 #include "tools/TorchModel.h"
+#include "vm_probe.h"
 
 // Star check for the torch half: while a host streams data out of the VM over
 // ssh, the torch view must attribute the load to that host's address, as the top
@@ -34,6 +35,8 @@ int main(int argc, char *argv[])
     connectOptions.read(parser);
 
     QTextStream out(stdout);
+    if (const int code = skipWithoutDevVm(out, connectOptions.host))
+        return code;
     const QString expectHost = parser.value(expectOption);
     const int wantedSamples = qMax(3, parser.value(samplesOption).toInt());
     const double minRate = parser.value(rateOption).toDouble();

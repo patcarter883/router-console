@@ -30,6 +30,11 @@ the star outranks anything you infer.
    unlinked inode and the state dies with it (this happened once). To run a
    second VM, use FWD_* port overrides in a copy created explicitly for that
    run, and merge nothing back but code.
+   Also: ALWAYS run the suite as `ctest -LE vm-boot`. The `discovery-after-boot`
+   test (label vm-boot) KILLS every qemu on the host and daemonizes its own
+   replacement — running it inside a bare `ctest` destroys the session VM
+   mid-suite and leaves an orphan that dies later. Run the vm-boot label only
+   in isolation, when you intend it to take VM ownership.
 9. Verify before claiming: run the build, run the smoke curl against the VM,
    paste real output into the north-star evidence file:
 

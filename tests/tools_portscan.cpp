@@ -7,6 +7,7 @@
 
 #include "vm_fixture.h"
 #include "tools/PortScanTool.h"
+#include "vm_probe.h"
 
 // Tool-tier check for the port scan window: scan the router's own loopback from
 // inside the router, where dropbear listens on 22 and an unused port refuses.
@@ -29,6 +30,8 @@ int main(int argc, char *argv[])
     connectOptions.read(parser);
 
     QTextStream out(stdout);
+    if (const int code = skipWithoutDevVm(out, connectOptions.host))
+        return code;
     AppEngine engine;
     auto *scan = qobject_cast<PortScanTool *>(engine.portScanTool());
     if (!scan) {

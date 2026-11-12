@@ -8,6 +8,7 @@
 #include "vm_fixture.h"
 #include "config/ConfigEditor.h"
 #include "tools/SqmStatsTool.h"
+#include "vm_probe.h"
 
 // Tool-tier check for the SQM/CAKE stats window: enable the VM's sqm queue
 // through the UCI editor, wait for the cake qdisc to appear, parse it out of
@@ -30,6 +31,8 @@ int main(int argc, char *argv[])
     connectOptions.read(parser);
 
     QTextStream out(stdout);
+    if (const int code = skipWithoutDevVm(out, connectOptions.host))
+        return code;
     const QString section = parser.value(sectionOption);
     const QString device = parser.value(deviceOption);
 
