@@ -5,6 +5,7 @@
 
 #include "models/InterfacesModel.h"
 #include "DiscoveredHostsModel.h"
+#include "config/ConfigEditor.h"
 #include "protocol/MdnsDiscovery.h"
 #include "protocol/UbusClient.h"
 
@@ -31,6 +32,11 @@ AppEngine::AppEngine(QObject *parent) : QObject(parent)
     connect(m_client, &UbusClient::boardFailed, this, &AppEngine::onBoardFailed);
     connect(m_client, &UbusClient::certificateRequired, this, &AppEngine::onCertificateRequired);
     connect(m_client, &UbusClient::certificateRejected, this, &AppEngine::onCertificateRejected);
+    connect(m_client, &UbusClient::rebootRequested, this, &AppEngine::rebootRequested);
+    connect(m_client, &UbusClient::rebootFailed, this, [this](const Ubus::Error &error) {
+        emit rebootFailed(error.message.isEmpty() ? QStringLiteral("system.reboot failed")
+                                                  : error.message);
+    });
 
     m_thread.start();
 
@@ -181,6 +187,26 @@ void AppEngine::disconnectFromRouter()
     m_interfaces->stop();
     m_board = {};
     setState(State::Idle);
+}
+
+QObject *AppEngine::configEditor(const QString &domainId)
+{
+    if (ConfigEditor *existing = m_editors.value(domainId))
+        return existing;
+
+    const Config::DomainSpec *spec = Config::domain(domainId);
+    if (!spec)
+        return nullptr;
+
+    auto *editor = new ConfigEditor(m_client, *spec, this);
+    m_editors.insert(domainId, editor);
+    return editor;
+}
+
+void AppEngine::rebootRouter()
+{
+    UbusClient *client = m_client;
+    QMetaObject::invokeMethod(client, &UbusClient::systemReboot, Qt::QueuedConnection);
 }
 
 void AppEngine::onLoggedIn(const Ubus::Session &session)

@@ -2,15 +2,18 @@
 
 #include <QAbstractItemModel>
 #include <QByteArray>
+#include <QHash>
 #include <QObject>
 #include <QThread>
 
 #include "protocol/MdnsTypes.h"
 #include "DiscoveredHostsModel.h"
+#include "config/ConfigModels.h"
 #include "protocol/UbusTypes.h"
 
 class UbusClient;
 class InterfacesModel;
+class ConfigEditor;
 class MdnsDiscovery;
 
 // Owns the connection lifecycle and exposes it to QML as plain properties.
@@ -36,6 +39,7 @@ class AppEngine : public QObject
     Q_PROPERTY(QAbstractItemModel *discoveredHosts READ discoveredHosts CONSTANT)
     Q_PROPERTY(int discoveredCount READ discoveredCount NOTIFY discoveredChanged)
     Q_PROPERTY(QString discoveryStatus READ discoveryStatus NOTIFY discoveredChanged)
+    Q_PROPERTY(QAbstractItemModel *configDomains READ configDomains CONSTANT)
 
 public:
     explicit AppEngine(QObject *parent = nullptr);
@@ -56,16 +60,22 @@ public:
     QAbstractItemModel *discoveredHosts() { return &m_discovered; }
     int discoveredCount() const { return m_discovered.count(); }
     QString discoveryStatus() const { return m_discoveryStatus; }
+    QAbstractItemModel *configDomains() { return &m_domains; }
 
     Q_INVOKABLE void connectTo(const QString &host, const QString &port, const QString &username,
                                const QString &password);
     Q_INVOKABLE void trustCertificate();
     Q_INVOKABLE void rejectCertificate();
     Q_INVOKABLE void disconnectFromRouter();
+    // One editor per domain id, created on first open and owned by the engine.
+    Q_INVOKABLE QObject *configEditor(const QString &domainId);
+    Q_INVOKABLE void rebootRouter();
 
 signals:
     void stateChanged();
     void discoveredChanged();
+    void rebootRequested();
+    void rebootFailed(const QString &error);
 
 private:
     enum class State { Idle, Connecting, TrustPending, Connected, Failed };
@@ -85,6 +95,8 @@ private:
     QThread m_thread;
     UbusClient *m_client = nullptr;
     InterfacesModel *m_interfaces = nullptr;
+    ConfigDomainsModel m_domains;
+    QHash<QString, ConfigEditor *> m_editors;
     QThread m_discoveryThread;
     MdnsDiscovery *m_discovery = nullptr;
     DiscoveredHostsModel m_discovered;
