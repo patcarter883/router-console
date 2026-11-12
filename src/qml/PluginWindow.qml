@@ -21,6 +21,10 @@ Window {
 
     Component.onCompleted: session = AppEngine.openPlugin(pluginId)
 
+    // Polling stops with the window; reopening resumes from the engine's cache.
+    onClosing: if (session)
+                   session.stop()
+
     Loader {
         id: viewLoader
         anchors.fill: parent
