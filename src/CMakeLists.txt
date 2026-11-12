@@ -9,8 +9,8 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 6.4 REQUIRED COMPONENTS Quick QuickControls2 Network)
 
 qt_add_executable(router-console
-    src/main.cpp
-    src/AppEngine.cpp
+    main.cpp
+    AppEngine.cpp
 )
 
 qt_add_qml_module(router-console
