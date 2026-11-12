@@ -231,3 +231,11 @@ foreach(mode routes ospf bgp config)
              COMMAND routing-views --mode ${mode} --accept-new-cert)
     set_tests_properties(routing-${mode} PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 180)
 endforeach()
+
+# --- Milestone 14: terminal --------------------------------------------------
+# Command-at-a-time console over rpcd file exec: stdout, stderr and the exit
+# status per command, plus the working directory and history the window carries.
+add_executable(m14-terminal m14_terminal.cpp)
+target_link_libraries(m14-terminal PRIVATE router-console-core)
+add_test(NAME m14-terminal COMMAND m14-terminal --accept-new-cert)
+set_tests_properties(m14-terminal PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 120)

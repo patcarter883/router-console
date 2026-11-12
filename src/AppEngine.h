@@ -35,6 +35,7 @@ class TorchModel;
 class LogTool;
 class LeaseTool;
 class BackupTool;
+class TerminalTool;
 
 // Owns the connection lifecycle and exposes it to QML as plain properties.
 // The ubus client lives in its own thread; every call into it is queued and
@@ -69,6 +70,7 @@ class AppEngine : public QObject
     Q_PROPERTY(QObject *logTool READ logTool CONSTANT)
     Q_PROPERTY(QObject *leaseTool READ leaseTool CONSTANT)
     Q_PROPERTY(QObject *backupTool READ backupTool CONSTANT)
+    Q_PROPERTY(QObject *terminalTool READ terminalTool CONSTANT)
     Q_PROPERTY(QObject *routesTool READ routesTool CONSTANT)
     Q_PROPERTY(QObject *ospfTool READ ospfTool CONSTANT)
     Q_PROPERTY(QObject *bgpTool READ bgpTool CONSTANT)
@@ -104,6 +106,7 @@ public:
     QObject *logTool();
     QObject *leaseTool();
     QObject *backupTool();
+    QObject *terminalTool();
     QObject *routesTool();
     QObject *ospfTool();
     QObject *bgpTool();
@@ -164,6 +167,7 @@ private:
     LogTool *m_log = nullptr;
     LeaseTool *m_leases = nullptr;
     BackupTool *m_backup = nullptr;
+    TerminalTool *m_terminal = nullptr;
     QThread m_discoveryThread;
     MdnsDiscovery *m_discovery = nullptr;
     DiscoveredHostsModel m_discovered;

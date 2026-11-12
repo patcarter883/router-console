@@ -24,6 +24,18 @@ struct ExecResult {
     bool isOk() const { return code == 0; }
 };
 
+// One command typed into the terminal window: rpcd runs `/bin/sh -c` once and
+// returns both streams, so the window is a command-at-a-time console
+// (docs/ubus-rpcd-read-surface.md, "Terminal window").
+struct TerminalResult {
+    QString command;
+    int code = -1;         // exit status the router reported
+    bool statusKnown = false; // false when the shell ended before the marker
+    QString cwd;           // directory the command ended in, empty when unknown
+    QString stdoutText;
+    QString stderrText;
+};
+
 // --- ping / traceroute -------------------------------------------------------
 
 struct PingReply {
@@ -212,6 +224,7 @@ Q_DECLARE_METATYPE(Ubus::DhcpLease)
 Q_DECLARE_METATYPE(QList<Ubus::DhcpLease>)
 
 Q_DECLARE_METATYPE(Ubus::ExecResult)
+Q_DECLARE_METATYPE(Ubus::TerminalResult)
 Q_DECLARE_METATYPE(Ubus::PingReply)
 Q_DECLARE_METATYPE(Ubus::PingReport)
 Q_DECLARE_METATYPE(Ubus::TracerouteHop)

@@ -269,6 +269,57 @@ and the rules' `icmp_type`/address/port lists are editable.
   output via rpcd file/exec (`/usr/libexec/sqm` helpers run as root) and parse.
   cake_mq-aware: iterate all cake instances when backported kernels land.
 
+## Terminal window (interactive shell)
+
+Measured on 25.12.6 (2026-11-13, private VM instance on 127.0.0.1:50443),
+`ubus -v list file` on the router:
+
+    "exec": { "command": "String", "params": "Array", "env": "Table" }
+
+There is **no tty parameter and no tty allocation**. The measured facts:
+
+| probe | result |
+| --- | --- |
+| `file exec /bin/sh -c '[ -t 1 ] && …'` | `stdout-notty` (both with and without a `terminal: true` argument — the extra key is accepted and ignored) |
+| `file exec /bin/sh -c 'read x; echo "$?"'` | `1`, empty: stdin is at EOF, no writer |
+| `file exec /bin/sh -c 'echo out; echo err >&2; exit 7'` | `{code: 7, stdout: "out\n", stderr: "err\n"}` — streams are separate fields, exit status in `code` |
+| 90 KB of stdout | returned whole |
+| 900 KB of stdout | `result [8]` (no data): rpcd's reply has a ~1 MB ubus message cap |
+| `sh -c 'sleep 45 & echo started'` | never answers; the JSON-RPC call dies at 60 s with `ubus request timed out` — exec waits for the stdout pipe to close, and a background child holds it |
+| `sh -c 'sleep 40; echo done'` | answers after 40 s, `code 0`: a foreground command may run longer than the request timeout |
+| `script`, `ttyd`, `screen`, `tmux`, `socat` | **none installed** on the image, so there is no PTY wrapper to borrow |
+| ACL | `/bin/echo` (not granted) answers `[6] permission denied`, `/bin/sh` answers: the grant in `scripts/router-console.acl.json` is live and enforced |
+
+Conclusion: rpcd's exec is request/response with no channel for keystrokes, so a
+PTY session cannot be delivered over this surface, and adding one would need
+router-side code (out of scope). The window is therefore a **command-at-a-time
+console**, and says so: each Enter is one `/bin/sh -c` on the router, no stdin,
+no full-screen programs, and the window — not the shell — remembers the working
+directory.
+
+### Command framing
+
+The client sends `/bin/sh -c <frame> router-console <cwd>`:
+
+    cd -- '<cwd>' 2>/dev/null || cd /
+    <the command text, verbatim>
+    __rc_term_rc=$?
+    printf '\n__rc_term__ %s %s\n' "$__rc_term_rc" "$PWD"
+
+The command text goes in ungrouped so heredocs, multi-line input, `#`-only
+lines and pipelines behave as typed. The trailing marker carries the exit status
+and the directory the command ended in; the client strips it, keeps the cwd for
+the next command and shows the status. `exit N` ends the shell before the marker
+prints, so the reply's `code` is used and the cwd stays where it was.
+
+Measured frame results (same VM): `cd /tmp` → cwd `/tmp`; `pwd` in `/tmp` →
+`/tmp`; `echo 'a b' "c"` → `a b c`; `ls /nonexistent` → rc 1 with the message on
+stderr; `printf 'no trailing newline'` → kept without an added line break;
+`cat <<EOF` heredoc → body returned.
+
+Limits the window reports rather than hides: output past the reply cap, and a
+command that leaves a daemon holding stdout (60 s, then the transport error).
+
 ## Daily-driver tier: log, DHCP leases, config backup
 
 Measured on 25.12.6 (2026-11-13, private VM instance on 127.0.0.1:20443).

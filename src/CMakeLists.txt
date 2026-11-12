@@ -18,6 +18,7 @@ add_library(router-console-core STATIC
     plugins/PluginSpec.cpp
     protocol/FrrCodec.cpp
     protocol/MdnsDiscovery.cpp
+    protocol/TerminalCodec.cpp
     protocol/ToolCodec.cpp
     protocol/UbusClient.cpp
     protocol/UciCodec.cpp
@@ -31,6 +32,7 @@ add_library(router-console-core STATIC
     tools/PingTool.cpp
     tools/PortScanTool.cpp
     tools/SqmStatsTool.cpp
+    tools/TerminalTool.cpp
     tools/TorchModel.cpp
     tools/TracerouteTool.cpp
 )
@@ -56,6 +58,7 @@ qt_add_qml_module(router-console
         qml/FilesWindow.qml
         qml/InterfaceWindow.qml
         qml/LeasesWindow.qml
+        qml/TerminalWindow.qml
         qml/LogWindow.qml
         qml/RoutesWindow.qml
         qml/OspfWindow.qml
