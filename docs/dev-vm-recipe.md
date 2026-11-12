@@ -110,6 +110,29 @@ A second call carrying that token returns board data:
 `timeout` is 300 s: sessions expire, so the client re-logins on
 `PERMISSION_DENIED` (ubus status 6) instead of surfacing an auth error.
 
+## Client-side checks
+
+With the VM up (`scripts/dev-vm.sh`):
+
+    cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
+    ctest --test-dir build --output-on-failure     # connect-smoke: login + system.board
+
+`build/tests/connect-smoke` prints the typed board fields and exits 0 only when
+the session and `system.board` both succeed:
+
+    CONNECTED
+      hostname: OpenWrt
+      model:    QEMU Standard PC (Q35 + ICH9, 2009)
+      firmware: OpenWrt 25.12.6 r33311-981c978eff
+      kernel:   6.12.112
+      target:   x86/64
+
+The Qt window itself is checked with `scripts/gui-check.sh`, which runs the
+client on a headless Xvfb, connects, and writes a screenshot
+(`docs/evidence/m1-connect-window.png`). The certificate trust prompt is
+captured the same way with `EXTRA_ARGS="" WAIT=5` after deleting
+`~/.config/open-broadcast/router-console.conf`.
+
 ## Traffic generator for graph checks
 
 iperf3 in the VM (`apk add iperf3`) or from the host through the forwarded port.
