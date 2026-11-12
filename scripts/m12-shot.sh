@@ -30,7 +30,6 @@ APP=$!
 trap 'kill $APP 2>/dev/null || true' EXIT
 sleep "$WAIT"
 
-WFILE="${OUT%.png}.unused"
 import -display "$DISPLAY_" -window root "$OUT"
 echo "screenshot: $OUT"
 ls -l "$OUT"
