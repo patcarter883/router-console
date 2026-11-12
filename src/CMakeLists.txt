@@ -8,9 +8,13 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS Quick QuickControls2 Network)
 add_library(router-console-core STATIC
     AppEngine.cpp
     models/InterfacesModel.cpp
+    config/ConfigEditor.cpp
+    config/ConfigModels.cpp
+    config/DomainRegistry.cpp
     DiscoveredHostsModel.cpp
     protocol/MdnsDiscovery.cpp
     protocol/UbusClient.cpp
+    protocol/UciCodec.cpp
 )
 
 target_include_directories(router-console-core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -24,6 +28,7 @@ qt_add_qml_module(router-console
     URI RouterConsole
     VERSION 1.0
     QML_FILES
+        qml/ConfigWindow.qml
         qml/InterfaceWindow.qml
         qml/Main.qml
         qml/Connect.qml

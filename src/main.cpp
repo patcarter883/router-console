@@ -24,7 +24,13 @@ int main(int argc, char *argv[])
     const QCommandLineOption interfaceOption("open-interface",
                                              "open the graph window for this interface on connect",
                                              "name");
-    parser.addOptions({hostOption, userOption, passwordOption, trustOption, interfaceOption});
+    const QCommandLineOption configOption("open-config",
+                                          "open the config editor for this domain on connect",
+                                          "domain");
+    const QCommandLineOption stageOption("stage", "stage option=value in the opened config editor",
+                                         "option=value");
+    parser.addOptions({hostOption, userOption, passwordOption, trustOption, interfaceOption,
+                       configOption, stageOption});
     parser.process(app);
 
     auto *engine = new AppEngine(&app);
@@ -39,6 +45,8 @@ int main(int argc, char *argv[])
 
     QQmlApplicationEngine qml;
     qml.rootContext()->setContextProperty("startupInterfaceName", parser.value(interfaceOption));
+    qml.rootContext()->setContextProperty("startupConfigDomain", parser.value(configOption));
+    qml.rootContext()->setContextProperty("startupStageValue", parser.value(stageOption));
     qml.loadFromModule("RouterConsole", "Main");
     if (qml.rootObjects().isEmpty())
         return 1;

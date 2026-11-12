@@ -1,0 +1,17 @@
+{
+	"router-console": {
+		"description": "router-console native client: staged UCI editing across the core config domains",
+		"read": {
+			"ubus": {
+				"uci": [ "get", "state", "changes" ]
+			},
+			"uci": [ "system", "network", "wireless", "firewall", "dhcp", "sqm" ]
+		},
+		"write": {
+			"ubus": {
+				"uci": [ "set", "add", "delete", "apply", "confirm", "revert", "commit", "order", "rename" ]
+			},
+			"uci": [ "system", "network", "wireless", "firewall", "dhcp", "sqm" ]
+		}
+	}
+}
