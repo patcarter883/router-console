@@ -1,6 +1,7 @@
 #!/bin/sh /etc/rc.common
-# Stand-in for nettime's init script on the dev VM: registers the service
-# under its real name so the client's service.list read has the real shape.
+# Stand-in for the nettime package's init script on the dev VM: registers the
+# service under its router-side name so the client's service.list read has the
+# real shape.
 START=95
 USE_PROCD=1
 

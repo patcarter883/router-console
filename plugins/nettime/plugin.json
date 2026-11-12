@@ -1,9 +1,10 @@
 {
   "id": "nettime",
-  "title": "Net Time Provider",
+  "title": "Nettime provider",
   "order": 62,
   "interval": 2000,
-  "view": "NetTime.qml",
+  "view": "Nettime.qml",
+  "note": "The router-side service and package keep their published names: the video project's nettime package is installed as NETTIME_ROUTER_OBJECT (scripts/nettime-routerside.sh). Only the procd binding below spells it; the status object is this client's own shim.",
   "sources": [
     {
       "id": "status",

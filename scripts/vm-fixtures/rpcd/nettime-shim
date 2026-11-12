@@ -1,19 +1,24 @@
 #!/bin/sh
-# rpcd shim for nettime's status object, on the dev VM with the REAL package
+# rpcd shim for the nettime status object, on the dev VM with the REAL package
 # installed.
 #
 # The packaged app (video project) is a GstNetTime provider on UDP 5637 and
 # exposes no rpcd object of its own: its only surfaces are the UDP clock itself
-# and procd's view of the daemon. The client's view binds an object called
-# `nettime` with a `status` method, so this shim serves that name.
+# and procd's view of the daemon. The client's view binds the router-side object
+# name (scripts/nettime-routerside.sh), so this shim serves that name.
 #
 # Every field it reports is MEASURED from the running daemon or its package:
-#   pid      procd's instance pid for nettime
+#   pid      procd's instance pid for the service
 #   port     the UDP port the daemon actually has bound (from netstat)
 #   clock    CLOCK_REALTIME, which is what the package's source forces
 #   uptime   NOT reported: neither procd nor the daemon exposes a start time,
 #            and an invented figure is worse than an absent one
 #   clients  NOT reported: the provider keeps no client counter
+
+# The router-side service name: the apk this shim fronts is published under it.
+# The installer substitutes it from scripts/nettime-routerside.sh.
+SERVICE="@NETTIME_ROUTER_OBJECT@"
+
 case "$1" in
 list)
 	echo '{"status":{}}'
@@ -21,11 +26,11 @@ list)
 call)
 	[ "$2" = status ] || { printf '%s\n' '{}'; exit 0; }
 	enabled=false
-	/etc/init.d/nettime enabled 2>/dev/null && enabled=true
-	pid=$(ubus call service list '{"name":"nettime"}' 2>/dev/null \
-		| jsonfilter -e '@["nettime"].instances.*.pid' 2>/dev/null | head -n 1)
+	"/etc/init.d/$SERVICE" enabled 2>/dev/null && enabled=true
+	pid=$(ubus call service list "{\"name\":\"$SERVICE\"}" 2>/dev/null \
+		| jsonfilter -e "@[\"$SERVICE\"].instances.*.pid" 2>/dev/null | head -n 1)
 	port=$(netstat -lnup 2>/dev/null \
-		| awk '$NF ~ /nettime/ { split($4, a, ":"); print a[2] }' \
+		| awk -v s="$SERVICE" '$NF ~ s { split($4, a, ":"); print a[2] }' \
 		| sort -u | head -n 1)
 	printf '{"ts":"%s","enabled":%s,"pid":"%s","port":%s,"clock":"CLOCK_REALTIME","provider":"gst_net_time_provider"}\n' \
 		"$(date -Iseconds)" "$enabled" "${pid:-}" "${port:-null}"

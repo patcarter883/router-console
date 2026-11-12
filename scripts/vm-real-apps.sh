@@ -6,8 +6,10 @@
 #                       25.12.6 SDK: /usr/bin/rist2rist (librist + mbedtls linked
 #                       in), its procd init, its UCI config, its rpcd object and
 #                       ACL. The bridge then runs for real on UDP 5000.
-#   nettime         a real apk: /usr/bin/nettime (GstNetTime provider)
-#                       and its procd init; it serves CLOCK_REALTIME on UDP 5637.
+#   nettime             a real apk from the video project: /usr/bin daemon
+#                       (GstNetTime provider) and its procd init; it serves
+#                       CLOCK_REALTIME on UDP 5637. Published under the
+#                       router-side name in scripts/nettime-routerside.sh.
 #   luci-app-modemaim   deployed through the app's OWN path
 #                       (cellular/router/deploy-modemaim.sh) plus the package's
 #                       UCI config. The app ships no Makefile, so there is
@@ -15,12 +17,13 @@
 #                       ACMA extract are what the view binds to.
 #
 # The mock script is untouched. To go back:
-#   apk del luci-app-rist2rist nettime && scripts/vm-mock-apps.sh
+#   apk del luci-app-rist2rist "$NETTIME_ROUTER_OBJECT" && scripts/vm-mock-apps.sh
 #
 #   SSHP=10022 scripts/vm-real-apps.sh
 #   RIST_APK=...  NETTIME_APK=...  CELLULAR=... to override source locations.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/nettime-routerside.sh
 
 SSHP=${SSHP:-10022}
 SDK26=${SDK26:-/home/pat/code/openwrt/openwrt-sdk-25.12.6-x86-64_gcc-14.3.0_musl.Linux-x86_64}
@@ -33,8 +36,8 @@ if [ -z "$RIST_APK" ]; then
     RIST_APK=$(ls "$SDK26"/bin/packages/x86_64/base/luci-app-rist2rist-*.apk 2>/dev/null | head -n 1 || true)
 fi
 if [ -z "$NETTIME_APK" ]; then
-    NETTIME_APK=$(ls "$SDK26"/bin/packages/x86_64/base/nettime-*.apk 2>/dev/null | head -n 1 || true)
-    [ -n "$NETTIME_APK" ] || NETTIME_APK=$(ls "$ARTIFACTS"/nettime-*.apk 2>/dev/null | head -n 1 || true)
+    NETTIME_APK=$(ls "$SDK26"/bin/packages/x86_64/base/"$NETTIME_ROUTER_APK_PREFIX"-*.apk 2>/dev/null | head -n 1 || true)
+    [ -n "$NETTIME_APK" ] || NETTIME_APK=$(ls "$ARTIFACTS"/"$NETTIME_ROUTER_APK_PREFIX"-*.apk 2>/dev/null | head -n 1 || true)
 fi
 CELLULAR=${CELLULAR:-/home/pat/workspace/cellular}
 
@@ -53,7 +56,7 @@ put() { ssh_vm "cat > '$2'" < "$1"; }
 echo "apps: $(basename "$RIST_APK"), $(basename "$NETTIME_APK")"
 
 # --- 1. stop the mocks that the packages replace ---------------------------
-ssh_vm '/etc/init.d/rist2rist stop 2>/dev/null; /etc/init.d/nettime stop 2>/dev/null; true'
+ssh_vm "/etc/init.d/rist2rist stop 2>/dev/null; /etc/init.d/$NETTIME_ROUTER_OBJECT stop 2>/dev/null; true"
 
 # --- 2. packages -----------------------------------------------------------
 put "$RIST_APK" /tmp/rist2rist.apk
@@ -70,7 +73,7 @@ ssh_vm 'apk add --allow-untrusted --force-overwrite /tmp/rist2rist.apk /tmp/nett
 echo "--- adopt the packaged conffiles"
 ssh_vm '
 for f in $(find /etc -name "*.apk-new"); do mv -f "$f" "${f%.apk-new}"; echo "  ${f%.apk-new}"; done
-chmod +x /etc/init.d/rist2rist /etc/init.d/nettime 2>/dev/null || true
+chmod +x /etc/init.d/rist2rist /etc/init.d/'"$NETTIME_ROUTER_OBJECT"' 2>/dev/null || true
 '
 
 # --- 3. rist2rist: a real, running bridge ----------------------------------
@@ -115,15 +118,16 @@ put "$CELLULAR/luci-app-modemaim/root/etc/config/modemaim" /etc/config/modemaim
 # has no GPS to read.
 ssh_vm 'ubus call modemaim setorigin "{\"lat\":-33.0,\"lon\":151.6}"'
 
-# --- 5. nettime: the real provider, plus the status shim ---------------
+# --- 5. nettime: the real provider, plus the status shim -------------------
 echo "--- nettime service"
-ssh_vm '/etc/init.d/nettime enable >/dev/null 2>&1; /etc/init.d/nettime restart >/dev/null 2>&1' || true
+ssh_vm "/etc/init.d/$NETTIME_ROUTER_OBJECT enable >/dev/null 2>&1; /etc/init.d/$NETTIME_ROUTER_OBJECT restart >/dev/null 2>&1" || true
 
 # The packaged app has no rpcd object: its surface is the UDP clock and procd.
-# This shim serves the `nettime` object name the view declares, reporting
-# only what the running daemon can be measured for (see the file's header).
-put scripts/vm-fixtures/rpcd/nettime-shim /usr/libexec/rpcd/nettime
-ssh_vm 'chmod +x /usr/libexec/rpcd/nettime; /etc/init.d/rpcd restart >/dev/null 2>&1'
+# This shim serves the client's status object and measures the router-side
+# service, whose name is substituted from scripts/nettime-routerside.sh.
+sed "s/@NETTIME_ROUTER_OBJECT@/$NETTIME_ROUTER_OBJECT/" scripts/vm-fixtures/rpcd/nettime-shim \
+    | ssh_vm "cat > /usr/libexec/rpcd/nettime"
+ssh_vm "chmod +x /usr/libexec/rpcd/nettime; /etc/init.d/rpcd restart >/dev/null 2>&1"
 sleep 3
 
 # --- 6. raw surfaces -------------------------------------------------------
@@ -136,9 +140,9 @@ ssh_vm 'ubus call rist2rist status 2>&1 || true'
 echo "--- rist2rist / nettime: UDP sockets"
 ssh_vm 'netstat -lnup | grep -E "rist2rist|nettime" || true'
 echo "--- nettime: provider log"
-ssh_vm 'logread -e "nettime: serving" | tail -2'
+ssh_vm 'logread -e ": serving" | tail -2'
 echo "--- nettime: status shim"
-ssh_vm 'ubus call nettime status'
+ssh_vm "ubus call nettime status"
 echo "--- modemaim: status (no modem -> absent signal, the real answer)"
 ssh_vm 'ubus call modemaim status'
 echo "--- modemaim: origin"
@@ -146,4 +150,4 @@ ssh_vm 'ubus call modemaim origin'
 echo "--- modemaim: real ACMA extract over HTTP"
 ssh_vm 'wget -q -O - http://127.0.0.1/luci-static/resources/modemaim/towers.json | head -c 200; echo'
 echo
-echo "back to the mocks: apk del luci-app-rist2rist nettime && scripts/vm-mock-apps.sh"
+echo "back to the mocks: apk del luci-app-rist2rist $NETTIME_ROUTER_OBJECT && scripts/vm-mock-apps.sh"

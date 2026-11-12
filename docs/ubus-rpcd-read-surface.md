@@ -275,13 +275,13 @@ declares which in its manifest (docs/plugins.md):
 | modemaim | `modemaim status` | `ts,state,pstate,plmn,operator,tech,mapped{site,conf,source},rssi,rsrp,rsrq,sinr,serving{pci,earfcn,rsrp,rsrq,ta,ta_us,eci},neighbors[],atNeighbors[]` |
 | modemaim | `modemaim origin` | `{"lat":...,"lon":...,"confirmed":...}` |
 | modemaim | `GET /luci-static/resources/modemaim/towers.json` | `{source,generated,data_date,bbox,towers[{site,lat,lon,band,mhz,bw,eirp,h,azs,hbw,carrier}]}` — static by design: over the 1 MiB ubus cap rpcd drops the whole object |
-| nettime | `nettime status` | `{ts,enabled,port,clock,provider,uptime,clients}` — **mock**: the packaged app exposes only the UDP 5637 GstNetTime provider, no rpcd object |
+| nettime | `nettime status` (the client's shim) | `{ts,enabled,port,clock,provider,uptime,clients}` — **mock**: the packaged app exposes only the UDP 5637 GstNetTime provider, no rpcd object |
 
 The LuCI apps are not installed in the VM (no OpenWrt SDK build in this
 milestone); `scripts/vm-mock-apps.sh` installs a mock rpcd script for modemaim
 and nettime, a procd stand-in + `/etc/config/rist2rist` for rist2rist, and a
 small tower extract with the real schema. modemaim's mock answers the real
-script's keys verbatim; nettime's does not correspond to any shipped method.
+script's keys verbatim; the nettime one does not correspond to any shipped method.
 
 The plugin surfaces ship as their own rpcd ACL group (`scripts/plugins.acl.json`,
 installed as `/usr/share/rpcd/acl.d/router-console-plugins.json`): `service list`,
