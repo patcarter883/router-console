@@ -3,6 +3,7 @@
 
 #include "UbusClient.h"
 
+#include "ToolCodec.h"
 #include "UciCodec.h"
 
 #include <QCryptographicHash>
@@ -19,6 +20,7 @@
 #include <memory>
 
 namespace UciCodec = Ubus::UciCodec;
+namespace ToolCodec = Ubus::ToolCodec;
 
 namespace {
 
@@ -138,6 +140,16 @@ Ubus::DeviceCounters parseCounters(const QJsonObject &statistics)
 UbusClient::UbusClient(QObject *parent)
     : QObject(parent), m_nam(new QNetworkAccessManager(this))
 {
+    qRegisterMetaType<Ubus::PingReport>();
+    qRegisterMetaType<Ubus::TracerouteReport>();
+    qRegisterMetaType<Ubus::PortScanReport>();
+    qRegisterMetaType<Ubus::QdiscStats>();
+    qRegisterMetaType<QList<Ubus::QdiscStats>>();
+    qRegisterMetaType<Ubus::ConntrackFlow>();
+    qRegisterMetaType<QList<Ubus::ConntrackFlow>>();
+    qRegisterMetaType<Ubus::FileListing>();
+    qRegisterMetaType<Ubus::SysupgradeCheck>();
+    qRegisterMetaType<Ubus::ExecResult>();
 }
 
 void UbusClient::login(const QUrl &endpoint, const QString &username, const QString &password)
@@ -416,6 +428,233 @@ void UbusClient::callApp(const QString &key, const QString &object, const QStrin
         }
         emit appCallSucceeded(key, result);
     });
+}
+
+// --- Tool tier ---------------------------------------------------------------
+
+void UbusClient::ping(const QString &target, int count)
+{
+    if (!ToolCodec::isSafeTarget(target)) {
+        emit pingFailed({Ubus::Status::InvalidArgument,
+                         QStringLiteral("invalid ping target: %1").arg(target)});
+        return;
+    }
+    const int packets = qBound(1, count, 20);
+    const QStringList params{QStringLiteral("-c"), QString::number(packets),
+                             QStringLiteral("-W"), QStringLiteral("1"),
+                             QStringLiteral("-i"), QStringLiteral("1"), target};
+    call(QStringLiteral("file"), QStringLiteral("exec"),
+         ToolCodec::execArgs(QStringLiteral("/bin/ping"), params),
+         [this, target, packets](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit pingFailed(error);
+                 return;
+             }
+             emit pingFinished(ToolCodec::parsePing(target, result.value(QStringLiteral("stdout")).toString(),
+                                                    packets));
+         });
+}
+
+void UbusClient::traceroute(const QString &target, int maxHops)
+{
+    if (!ToolCodec::isSafeTarget(target)) {
+        emit tracerouteFailed({Ubus::Status::InvalidArgument,
+                               QStringLiteral("invalid traceroute target: %1").arg(target)});
+        return;
+    }
+    const int hops = qBound(1, maxHops, 30);
+    const QStringList params{QStringLiteral("-n"), QStringLiteral("-q"), QStringLiteral("1"),
+                             QStringLiteral("-w"), QStringLiteral("1"),
+                             QStringLiteral("-m"), QString::number(hops), target};
+    call(QStringLiteral("file"), QStringLiteral("exec"),
+         ToolCodec::execArgs(QStringLiteral("/bin/traceroute"), params),
+         [this, target](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit tracerouteFailed(error);
+                 return;
+             }
+             emit tracerouteFinished(
+                 ToolCodec::parseTraceroute(target, result.value(QStringLiteral("stdout")).toString()));
+         });
+}
+
+void UbusClient::portScan(const QString &target, const QList<int> &ports)
+{
+    const QString script = ToolCodec::portScanScript(target, ports);
+    if (script.isEmpty()) {
+        emit portScanFailed({Ubus::Status::InvalidArgument,
+                             QStringLiteral("invalid port scan target or empty port list")});
+        return;
+    }
+    call(QStringLiteral("file"), QStringLiteral("exec"),
+         ToolCodec::execArgs(QStringLiteral("/bin/sh"),
+                             {QStringLiteral("-c"), script}),
+         [this, target](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit portScanFailed(error);
+                 return;
+             }
+             emit portScanFinished(
+                 ToolCodec::parsePortScan(target, result.value(QStringLiteral("stdout")).toString()));
+         });
+}
+
+void UbusClient::fetchQdiscs()
+{
+    call(QStringLiteral("file"), QStringLiteral("exec"),
+         ToolCodec::execArgs(QStringLiteral("/sbin/tc"),
+                             {QStringLiteral("-s"), QStringLiteral("qdisc"), QStringLiteral("show")}),
+         [this](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit qdiscsFailed(error);
+                 return;
+             }
+             emit qdiscsReceived(
+                 ToolCodec::parseQdiscs(result.value(QStringLiteral("stdout")).toString()));
+         });
+}
+
+void UbusClient::fetchConntrack()
+{
+    // `file read` of /proc/net/nf_conntrack answers one short read (~4 KB): the
+    // kernel's seq_file shows only the first entries. cat through file.exec
+    // returns the whole table, both directions included.
+    call(QStringLiteral("file"), QStringLiteral("exec"),
+         ToolCodec::execArgs(QStringLiteral("/bin/cat"),
+                             {QStringLiteral("/proc/net/nf_conntrack")}),
+         [this](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit conntrackFailed(error);
+                 return;
+             }
+             emit conntrackReceived(
+                 ToolCodec::parseConntrack(result.value(QStringLiteral("stdout")).toString()));
+         });
+}
+
+void UbusClient::fetchLocalAddresses()
+{
+    call(QStringLiteral("network.interface"), QStringLiteral("dump"), {},
+         [this](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit conntrackFailed(error);
+                 return;
+             }
+             QStringList addresses;
+             for (const QJsonValue &value : result.value(QStringLiteral("interface")).toArray()) {
+                 const QJsonObject entry = value.toObject();
+                 for (const char *key : {"ipv4-address", "ipv6-address"}) {
+                     for (const QJsonValue &address :
+                          entry.value(QLatin1String(key)).toArray()) {
+                         const QString ip = address.toObject().value(QStringLiteral("address")).toString();
+                         if (!ip.isEmpty())
+                             addresses.append(ip);
+                     }
+                 }
+             }
+             addresses.removeDuplicates();
+             emit localAddressesReceived(addresses);
+         });
+}
+
+void UbusClient::fileList(const QString &path)
+{
+    call(QStringLiteral("file"), QStringLiteral("list"), ToolCodec::fileListArgs(path),
+         [this, path](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit fileListingFailed(error);
+                 return;
+             }
+             emit fileListingReceived(ToolCodec::parseFileListing(path, result));
+         });
+}
+
+void UbusClient::fileRead(const QString &path)
+{
+    call(QStringLiteral("file"), QStringLiteral("read"), ToolCodec::fileReadArgs(path),
+         [this, path](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit fileReadFailed(error);
+                 return;
+             }
+             emit fileReadFinished(path, ToolCodec::parseFileData(result, true));
+         });
+}
+
+void UbusClient::fileWrite(const QString &path, const QByteArray &data)
+{
+    call(QStringLiteral("file"), QStringLiteral("write"), ToolCodec::fileWriteArgs(path, data),
+         [this, path, bytes = int(data.size())](const QJsonObject &, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit fileWriteFailed(error);
+                 return;
+             }
+             emit fileWriteFinished(path, bytes);
+         });
+}
+
+void UbusClient::fileRemove(const QString &path)
+{
+    call(QStringLiteral("file"), QStringLiteral("remove"), ToolCodec::fileRemoveArgs(path),
+         [this, path](const QJsonObject &, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit fileRemoveFailed(error);
+                 return;
+             }
+             emit fileRemoveFinished(path);
+         });
+}
+
+// upgrade_test validates whatever sits at /tmp/firmware.bin and reports the
+// sysupgrade(8) verdict; it never writes flash.
+void UbusClient::sysupgradeTest()
+{
+    call(QStringLiteral("rpc-sys"), QStringLiteral("upgrade_test"), {},
+         [this](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit sysupgradeCheckFailed(error);
+                 return;
+             }
+             emit sysupgradeChecked(ToolCodec::parseSysupgradeCheck(result));
+         });
+}
+
+void UbusClient::sysupgradeStart()
+{
+    call(QStringLiteral("rpc-sys"), QStringLiteral("upgrade_start"),
+         QJsonObject{{QStringLiteral("keep"), true}},
+         [this](const QJsonObject &, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit sysupgradeStartFailed(error);
+                 return;
+             }
+             emit sysupgradeStarted();
+         });
+}
+
+void UbusClient::packageInstall(const QStringList &packages)
+{
+    QStringList cleaned;
+    for (const QString &package : packages) {
+        if (ToolCodec::isSafeTarget(package))
+            cleaned.append(package);
+    }
+    if (cleaned.isEmpty()) {
+        emit packageInstallFailed({Ubus::Status::InvalidArgument,
+                                   QStringLiteral("no valid package names")});
+        return;
+    }
+    QStringList params{QStringLiteral("add")};
+    params.append(cleaned);
+    call(QStringLiteral("file"), QStringLiteral("exec"),
+         ToolCodec::execArgs(QStringLiteral("/usr/bin/apk"), params),
+         [this](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit packageInstallFailed(error);
+                 return;
+             }
+             emit packageInstallFinished(ToolCodec::parseExec(QStringLiteral("/usr/bin/apk"), result));
+         });
 }
 
 void UbusClient::closeSession()

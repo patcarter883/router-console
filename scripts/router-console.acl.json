@@ -1,15 +1,38 @@
 {
 	"router-console": {
-		"description": "router-console native client: staged UCI editing across the core config domains",
+		"description": "router-console native client: staged UCI editing across the core config domains, plus the tool tier (exec, files, sysupgrade test, conntrack, qdisc stats)",
 		"read": {
+			"file": {
+				"/": [ "list" ],
+				"/*": [ "list" ],
+				"/etc/**": [ "read", "list" ],
+				"/tmp/**": [ "read", "list" ],
+				"/proc/**": [ "read", "list" ],
+				"/bin/ping": [ "exec" ],
+				"/bin/ping6": [ "exec" ],
+				"/bin/traceroute": [ "exec" ],
+				"/bin/cat": [ "exec" ],
+				"/sbin/tc": [ "exec" ],
+				"/bin/sh": [ "exec" ]
+			},
 			"ubus": {
-				"uci": [ "get", "state", "changes" ]
+				"uci": [ "get", "state", "changes" ],
+				"file": [ "list", "read", "stat", "lstat", "md5" ],
+				"luci": [ "getConntrackList", "getRealtimeStats", "getMountPoints", "getBlockDevices" ],
+				"rpc-sys": [ "packagelist" ]
 			},
 			"uci": [ "system", "network", "wireless", "firewall", "dhcp", "sqm" ]
 		},
 		"write": {
+			"file": {
+				"/tmp/**": [ "write", "remove" ],
+				"/etc/config/**": [ "write", "remove" ],
+				"/usr/bin/apk": [ "exec" ]
+			},
 			"ubus": {
-				"uci": [ "set", "add", "delete", "apply", "confirm", "revert", "commit", "order", "rename" ]
+				"uci": [ "set", "add", "delete", "apply", "confirm", "revert", "commit", "order", "rename" ],
+				"file": [ "write", "remove", "exec" ],
+				"rpc-sys": [ "upgrade_test", "upgrade_start", "upgrade_clean" ]
 			},
 			"uci": [ "system", "network", "wireless", "firewall", "dhcp", "sqm" ]
 		}

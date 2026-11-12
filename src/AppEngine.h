@@ -21,6 +21,12 @@ class MdnsDiscovery;
 namespace Plugin {
 class Hub;
 }
+class PingTool;
+class TracerouteTool;
+class PortScanTool;
+class FilesTool;
+class SqmStatsTool;
+class TorchModel;
 
 // Owns the connection lifecycle and exposes it to QML as plain properties.
 // The ubus client lives in its own thread; every call into it is queued and
@@ -47,6 +53,12 @@ class AppEngine : public QObject
     Q_PROPERTY(QString discoveryStatus READ discoveryStatus NOTIFY discoveredChanged)
     Q_PROPERTY(QAbstractItemModel *configDomains READ configDomains CONSTANT)
     Q_PROPERTY(QAbstractItemModel *plugins READ pluginsModel CONSTANT)
+    Q_PROPERTY(QObject *pingTool READ pingTool CONSTANT)
+    Q_PROPERTY(QObject *tracerouteTool READ tracerouteTool CONSTANT)
+    Q_PROPERTY(QObject *portScanTool READ portScanTool CONSTANT)
+    Q_PROPERTY(QObject *filesTool READ filesTool CONSTANT)
+    Q_PROPERTY(QObject *sqmStatsTool READ sqmStatsTool CONSTANT)
+    Q_PROPERTY(QAbstractItemModel *torchModel READ torchModel CONSTANT)
 
 public:
     explicit AppEngine(QObject *parent = nullptr);
@@ -70,6 +82,12 @@ public:
     QAbstractItemModel *configDomains() { return &m_domains; }
     QAbstractItemModel *pluginsModel() const;
     Plugin::Hub *pluginHub() const { return m_plugins; }
+    QObject *pingTool();
+    QObject *tracerouteTool();
+    QObject *portScanTool();
+    QObject *filesTool();
+    QObject *sqmStatsTool();
+    QAbstractItemModel *torchModel();
 
     Q_INVOKABLE void connectTo(const QString &host, const QString &port, const QString &username,
                                const QString &password);
@@ -93,6 +111,7 @@ private:
 
     void startLogin();
     void setState(State state, const QString &error = {});
+    void resetTools();
     QString settingsKey() const;
 
     void onLoggedIn(const Ubus::Session &session);
@@ -108,6 +127,12 @@ private:
     InterfacesModel *m_interfaces = nullptr;
     ConfigDomainsModel m_domains;
     QHash<QString, ConfigEditor *> m_editors;
+    PingTool *m_ping = nullptr;
+    TracerouteTool *m_traceroute = nullptr;
+    PortScanTool *m_portScan = nullptr;
+    FilesTool *m_files = nullptr;
+    SqmStatsTool *m_sqm = nullptr;
+    TorchModel *m_torch = nullptr;
     QThread m_discoveryThread;
     MdnsDiscovery *m_discovery = nullptr;
     DiscoveredHostsModel m_discovered;

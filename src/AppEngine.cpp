@@ -13,6 +13,12 @@
 #include "plugins/PluginSession.h"
 #include "protocol/MdnsDiscovery.h"
 #include "protocol/UbusClient.h"
+#include "tools/FilesTool.h"
+#include "tools/PingTool.h"
+#include "tools/PortScanTool.h"
+#include "tools/SqmStatsTool.h"
+#include "tools/TorchModel.h"
+#include "tools/TracerouteTool.h"
 
 AppEngine::AppEngine(QObject *parent) : QObject(parent)
 {
@@ -29,6 +35,12 @@ AppEngine::AppEngine(QObject *parent) : QObject(parent)
     m_client = new UbusClient;
     m_interfaces = new InterfacesModel(m_client, this);
     m_plugins = new Plugin::Hub(Plugin::rootDirectory(), m_client, this);
+    m_ping = new PingTool(m_client, this);
+    m_traceroute = new TracerouteTool(m_client, this);
+    m_portScan = new PortScanTool(m_client, this);
+    m_files = new FilesTool(m_client, this);
+    m_sqm = new SqmStatsTool(m_client, this);
+    m_torch = new TorchModel(m_client, this);
     m_client->moveToThread(&m_thread);
     connect(&m_thread, &QThread::finished, m_client, &QObject::deleteLater);
 
@@ -86,6 +98,36 @@ QString AppEngine::settingsKey() const
 QAbstractItemModel *AppEngine::interfacesModel() const
 {
     return m_interfaces;
+}
+
+QObject *AppEngine::pingTool()
+{
+    return m_ping;
+}
+
+QObject *AppEngine::tracerouteTool()
+{
+    return m_traceroute;
+}
+
+QObject *AppEngine::portScanTool()
+{
+    return m_portScan;
+}
+
+QObject *AppEngine::filesTool()
+{
+    return m_files;
+}
+
+QObject *AppEngine::sqmStatsTool()
+{
+    return m_sqm;
+}
+
+QAbstractItemModel *AppEngine::torchModel()
+{
+    return m_torch;
 }
 
 QString AppEngine::statusText() const
@@ -207,8 +249,19 @@ void AppEngine::disconnectFromRouter()
     QMetaObject::invokeMethod(client, &UbusClient::closeSession, Qt::QueuedConnection);
     m_plugins->stopAll();
     m_interfaces->stop();
+    resetTools();
     m_board = {};
     setState(State::Idle);
+}
+
+void AppEngine::resetTools()
+{
+    m_torch->stop();
+    m_ping->reset();
+    m_traceroute->reset();
+    m_portScan->reset();
+    m_files->reset();
+    m_sqm->reset();
 }
 
 QObject *AppEngine::configEditor(const QString &domainId)

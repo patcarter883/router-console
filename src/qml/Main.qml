@@ -14,7 +14,7 @@ ApplicationWindow {
     title: qsTr("router-console")
 
     // Tree state and the tool windows it opens (one per interface, one per
-    // config domain).
+    // config domain, one per tool-tier window).
     property bool interfacesExpanded: true
     property bool configExpanded: true
     property bool pluginsExpanded: true
@@ -24,10 +24,23 @@ ApplicationWindow {
     property var interfaceWindows: []
     property var configWindows: []
     property var pluginWindows: []
+    property bool toolsExpanded: true
+    property bool startupToolOpened: false
+    property var toolWindows: []
+    readonly property var tools: [
+        { id: "ping", title: qsTr("Ping") },
+        { id: "traceroute", title: qsTr("Traceroute") },
+        { id: "portscan", title: qsTr("Port Scan") },
+        { id: "torch", title: qsTr("Torch") },
+        { id: "files", title: qsTr("Files") },
+        { id: "sqm", title: qsTr("SQM / CAKE stats") }
+    ]
     readonly property string startupInterface:
         typeof startupInterfaceName === "undefined" ? "" : startupInterfaceName
     readonly property string startupConfig:
         typeof startupConfigDomain === "undefined" ? "" : startupConfigDomain
+    readonly property string startupTool:
+        typeof startupToolId === "undefined" ? "" : startupToolId
     readonly property string startupStage:
         typeof startupStageValue === "undefined" ? "" : startupStageValue
     readonly property string startupPlugin:
@@ -107,6 +120,53 @@ ApplicationWindow {
         id: pluginWindowComponent
         PluginWindow {}
     }
+
+    // One window per tool id; reopening focuses the existing one.
+    function openTool(toolId) {
+        for (let i = 0; i < toolWindows.length; ++i) {
+            if (toolWindows[i].toolId === toolId) {
+                toolWindows[i].requestActivate()
+                return toolWindows[i]
+            }
+        }
+        const component = toolComponent(toolId)
+        if (!component)
+            return null
+        const window = component.createObject(root, { toolId: toolId })
+        if (!window)
+            return null
+        toolWindows.push(window)
+        window.closing.connect(function () {
+            const index = root.toolWindows.indexOf(window)
+            if (index >= 0)
+                root.toolWindows.splice(index, 1)
+        })
+        return window
+    }
+
+    function toolComponent(toolId) {
+        switch (toolId) {
+        case "ping": return pingWindowComponent
+        case "traceroute": return tracerouteWindowComponent
+        case "portscan": return portScanWindowComponent
+        case "torch": return torchWindowComponent
+        case "files": return filesWindowComponent
+        case "sqm": return sqmStatsWindowComponent
+        }
+        return null
+    }
+
+    function closeToolWindows() {
+        while (toolWindows.length > 0)
+            toolWindows.pop().close()
+    }
+
+    Component { id: pingWindowComponent; PingWindow {} }
+    Component { id: tracerouteWindowComponent; TracerouteWindow {} }
+    Component { id: portScanWindowComponent; PortScanWindow {} }
+    Component { id: torchWindowComponent; TorchWindow {} }
+    Component { id: filesWindowComponent; FilesWindow {} }
+    Component { id: sqmStatsWindowComponent; SqmStatsWindow {} }
 
     Component {
         id: interfaceWindowComponent
@@ -301,16 +361,63 @@ ApplicationWindow {
                     }
                 }
 
-                Repeater {
-                    model: [qsTr("Tools")]
-                    delegate: Text {
-                        required property string modelData
-                        Layout.fillWidth: true
-                        Layout.leftMargin: 8
-                        Layout.topMargin: 6
-                        text: modelData
-                        color: "#6f6f6f"
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 30
+                    color: toolsHeaderHover.containsMouse ? "#333333" : "transparent"
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 8
+                        text: (root.toolsExpanded ? "\u25be  " : "\u25b8  ") + qsTr("Tools")
+                        color: "#e8e8e8"
+                        font.bold: true
                         font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                        id: toolsHeaderHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: root.toolsExpanded = !root.toolsExpanded
+                    }
+                }
+
+                Column {
+                    id: toolsList
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 18
+                    visible: root.toolsExpanded
+                    spacing: 0
+
+                    Repeater {
+                        model: root.tools
+
+                        delegate: Rectangle {
+                            id: toolRow
+                            required property var modelData
+
+                            width: toolsList.width
+                            height: 30
+                            color: toolRowHover.containsMouse ? "#333333" : "transparent"
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.left: parent.left
+                                anchors.leftMargin: 10
+                                text: toolRow.modelData.title
+                                color: AppEngine.connected ? "#e8e8e8" : "#7a7a7a"
+                                font.pixelSize: 13
+                            }
+
+                            MouseArea {
+                                id: toolRowHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: root.openTool(toolRow.modelData.id)
+                            }
+                        }
                     }
                 }
 
@@ -469,6 +576,7 @@ ApplicationWindow {
                 root.closeInterfaceWindows()
                 root.closeConfigWindows()
                 root.closePluginWindows()
+                root.closeToolWindows()
                 return
             }
             connectDialog.close()
@@ -485,6 +593,10 @@ ApplicationWindow {
                 const window = root.openConfig(root.startupConfig)
                 if (window && root.startupStage.length > 0)
                     window.stageAfterLoad = root.startupStage
+            }
+            if (root.startupTool.length > 0 && !root.startupToolOpened) {
+                root.startupToolOpened = true
+                root.openTool(root.startupTool)
             }
         }
     }

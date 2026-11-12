@@ -86,3 +86,59 @@ foreach(plugin rist2rist modemaim nettime)
                      --password root --accept-new-cert)
     set_tests_properties(plugin-data-${plugin} PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 60)
 endforeach()
+# Tool tier: one check per window, all against the dev VM. Each exits 3 when the
+# VM is not reachable, so a run without the VM skips instead of failing.
+add_executable(tools-ping tools_ping.cpp)
+target_link_libraries(tools-ping PRIVATE router-console-core)
+add_test(NAME tools-ping
+         COMMAND tools-ping --host 127.0.0.1:10443 --user root --password root
+                 --accept-new-cert --target 10.0.2.3 --count 3)
+set_tests_properties(tools-ping PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 60)
+
+add_executable(tools-traceroute tools_traceroute.cpp)
+target_link_libraries(tools-traceroute PRIVATE router-console-core)
+add_test(NAME tools-traceroute
+         COMMAND tools-traceroute --host 127.0.0.1:10443 --user root --password root
+                 --accept-new-cert --target 10.0.2.3 --max-hops 6)
+set_tests_properties(tools-traceroute PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 60)
+
+add_executable(tools-portscan tools_portscan.cpp)
+target_link_libraries(tools-portscan PRIVATE router-console-core)
+add_test(NAME tools-portscan
+         COMMAND tools-portscan --host 127.0.0.1:10443 --user root --password root
+                 --accept-new-cert --target 127.0.0.1 --ports 22,9999
+                 --expect-open 22 --expect-closed 9999)
+set_tests_properties(tools-portscan PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 60)
+
+# The flagship: per-host attribution of a live ssh stream from the host.
+add_executable(torch-traffic torch_traffic.cpp)
+target_link_libraries(torch-traffic PRIVATE router-console-core)
+add_test(NAME torch-traffic
+         COMMAND torch-traffic --host 127.0.0.1:10443 --user root --password root
+                 --accept-new-cert --expect-host 192.168.77.2 --samples 6 --min-rate 100000)
+set_tests_properties(torch-traffic PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 90)
+
+add_executable(files-roundtrip files_roundtrip.cpp)
+target_link_libraries(files-roundtrip PRIVATE router-console-core)
+add_test(NAME files-roundtrip
+         COMMAND files-roundtrip --host 127.0.0.1:10443 --user root --password root
+                 --accept-new-cert --list-dir /etc/config)
+set_tests_properties(files-roundtrip PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 90)
+
+# Sysupgrade wiring without flashing: a random 4 KB file at /tmp/firmware.bin
+# must be rejected by rpc-sys upgrade_test.
+add_executable(sysupgrade-check sysupgrade_check.cpp)
+target_link_libraries(sysupgrade-check PRIVATE router-console-core)
+add_test(NAME sysupgrade-check
+         COMMAND sysupgrade-check --host 127.0.0.1:10443 --user root --password root
+                 --accept-new-cert)
+set_tests_properties(sysupgrade-check PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 60)
+
+# Enables sqm for the duration and restores the baseline; daemon work, so the
+# timeout allows the restart cycle.
+add_executable(sqm-stats sqm_stats.cpp)
+target_link_libraries(sqm-stats PRIVATE router-console-core)
+add_test(NAME sqm-stats
+         COMMAND sqm-stats --host 127.0.0.1:10443 --user root --password root
+                 --accept-new-cert --section eth1 --device eth1)
+set_tests_properties(sqm-stats PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 180)
