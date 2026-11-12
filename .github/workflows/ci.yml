@@ -1,0 +1,90 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-gcc
+            os: ubuntu-latest
+            # Qt is installed with aqtinstall (install-qt-action wraps it).
+            qt_arch: linux_gcc_64
+            generator: Ninja
+            artifact: router-console-linux-x86_64
+          - name: windows-msvc
+            os: windows-latest
+            qt_arch: win64_msvc2022_64
+            generator: Visual Studio 17 2022
+            artifact: router-console-windows-x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: ${{ matrix.qt_arch }}
+          cache: true
+
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libfontconfig1-dev libfreetype6-dev
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -G "${{ matrix.generator }}"
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_PREFIX_PATH="${{ env.QT_ROOT_DIR }}"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test (VM-dependent tests skip without the dev VM)
+        run: ctest --test-dir build -C Release -LE vm-boot --output-on-failure
+
+      - name: Deploy Windows runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item build\src\Release\router-console.exe dist\
+          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --release --no-translations `
+            --qmldir src\qml dist\router-console.exe
+          Compress-Archive -Path dist\* -DestinationPath "${{ matrix.artifact }}.zip"
+
+      - name: Collect Linux binary
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p dist
+          cp build/src/router-console dist/
+          tar -C dist -czf "${{ matrix.artifact }}.tar.gz" router-console
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}.zip
+            ${{ matrix.artifact }}.tar.gz
+          if-no-files-found: error
+
+env:
+  QT_VERSION: 6.8.3
