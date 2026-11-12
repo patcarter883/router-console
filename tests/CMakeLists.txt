@@ -279,3 +279,26 @@ set_tests_properties(m16-graph-ui PROPERTIES TIMEOUT 30)
 add_test(NAME m15-mdi-structure
          COMMAND ${CMAKE_SOURCE_DIR}/tests/m15_mdi_structure.sh ${CMAKE_SOURCE_DIR})
 set_tests_properties(m15-mdi-structure PROPERTIES TIMEOUT 30)
+
+# Milestone 17: the modemaim map + aim view. The model test is pure arithmetic
+# (bearing, site aggregation, peak-hold, marks); the live test polls the VM's
+# modemaim `signal` lane for 32 s and asserts the peaks, then drops a mark
+# through the API the Mark button calls.
+add_executable(m17-aim-model m17_aim_model.cpp)
+target_link_libraries(m17-aim-model PRIVATE router-console-core)
+add_test(NAME m17-aim-model COMMAND m17-aim-model)
+set_tests_properties(m17-aim-model PROPERTIES TIMEOUT 30)
+
+add_executable(m17-aim-live m17_aim_live.cpp)
+target_link_libraries(m17-aim-live PRIVATE router-console-core)
+add_test(NAME m17-aim-live
+         COMMAND m17-aim-live --host ${RC_TEST_HOST} --user root --password root
+                 --accept-new-cert --seconds 32 --min-sites 200)
+set_tests_properties(m17-aim-live PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 90)
+
+# Both plugin windows must load on a real X display without QML errors, and the
+# screen they draw is the milestone evidence.
+add_test(NAME m17-aim-ui
+         COMMAND ${CMAKE_SOURCE_DIR}/scripts/m17-shot.sh)
+set_tests_properties(m17-aim-ui PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 240
+                     ENVIRONMENT "RC_TEST_HOST=${RC_TEST_HOST};RC_TEST_SSH_PORT=${RC_TEST_SSH_PORT}")
