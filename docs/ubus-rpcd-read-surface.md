@@ -121,12 +121,91 @@ network.device status`), the two calls a graph row needs:
 
 ## Config read/write (all core domains)
 
-- `uci` (ubus object): `get`, `get_all`, `set`, `add`, `delete`, `apply`,
-  `confirm`, `revert`, `changes`. THE staged-apply primitive:
+- `uci` (ubus object): THE staged-apply primitive —
   read -> edit (staged) -> `changes` (list) -> `apply`+`confirm` or `revert`.
   Domains map to UCI packages: system, network, wireless, firewall (fw4),
   dhcp, and sqm (sqm-scripts stores its config in UCI too).
 - `luci-rpc.getInitList` etc. for service state.
+
+### Measured uci object on 25.12.6 (rpcd 2026.x, 2026-11-12)
+
+`ubus -v list uci` on the dev VM, which corrects the earlier inventory:
+
+    get      {config, section, option, type, match}
+    state    {config, section, option, type, match}
+    add      {config, type, name, values}
+    set      {config, section, type, match, values}
+    delete   {config, section, option, options}
+    rename   {config, section, option, name}
+    order    {config, sections}
+    changes  {config}
+    revert   {config}
+    commit   {config}
+    apply    {rollback, timeout}
+    confirm  {}
+    rollback {}
+
+**There is no `get_all`.** A whole package is read with `get` + a section type:
+
+    get {config:"sqm", type:"queue"}
+      -> {"values": {"eth1": {".anonymous":false, ".type":"queue", ".name":"eth1",
+                              ".index":0, "enabled":"0", "interface":"eth1",
+                              "download":"85000", "upload":"10000", ...}}}
+
+`get` with `{config, section}` answers `{"values": {...flat options...}}` for one
+section, and `get` with `{config, section, option}` answers `{"value": "85000"}`.
+Every option is a string — UCI has no types.
+
+`set` takes a **`values` table**, not an option/value pair: the pair form
+(`{config, section, option, value}`) answers status 2 INVALID_ARGUMENT. Measured:
+
+    set {"config":"sqm","section":"eth1","values":{"download":"90000"}} -> [0]
+    changes {"config":"sqm"} -> {"changes":[["set","eth1","download","90000"]]}
+
+`changes` is an array of tuples: `[op, section, option, value]` for a `set`, and
+`[op, section, type]` for a section-level `add`/`delete`.
+
+`apply {"rollback":true,"timeout":30}` writes the staged delta and starts the
+rollback timer; `confirm {}` cancels it. `commit {"config":...}` writes without
+the rollback window (what the client uses for one-shot lab resets, not for
+user-facing apply). `revert {"config":...}` discards the session's staged delta.
+
+### Staging is per ubus session (measured)
+
+Two sessions against the same package do not see each other's staging. Session A
+stages `download=93000`; session B then reads `changes` -> `{"changes":[]}` and
+`get` -> the committed `87000`, and B's `revert` does not touch A's delta. The
+delta is held in rpcd, keyed by session (nothing appears in `/tmp/.uci`).
+Consequence: the editor stages in its own session, `apply`/`revert` are always
+issued on that same session, and the UI must not assume it can see another
+client's pending edits.
+
+### ACL requirement (measured)
+
+The stock LuCI ACL groups grant `ubus.uci` methods
+`["get","set","commit","changes","add","apply","confirm","delete","order","rename"]`
+— `revert` (and the non-existent `get_all`) are **not** in that list, so a plain
+root session gets `{"error":{"code":-32002,"message":"Access denied"}}` for
+`uci revert` even though `uci get`/`set` work. The client therefore ships its own
+ACL group, `scripts/router-console.acl.json`, installed as
+`/usr/share/rpcd/acl.d/router-console.json` (`scripts/vm-rpcd-acl.sh` on the dev
+VM); it grants the same packages plus `revert` and `get_all`-free reads. A real
+deployment needs the same group in the router image — that is a packaging item,
+not a client workaround.
+
+`system.reboot` is used by the persistence test (and later by the tools tier); it
+answers immediately and the VM is back in ~20 s.
+
+### Domains
+
+The client's domain registry (`src/config/DomainRegistry.cpp`) names a package,
+the section type to enumerate and the editable options, read from the router's
+own config. SQM is the first domain: package `sqm`, section type `queue`, one
+section (`config queue 'eth1'` on the VM) with `enabled`, `interface`,
+`download`, `upload`, `qdisc`, `script`, `ingress_ecn`, `egress_ecn`,
+`linklayer`, `use_mq`. The choice lists are the VM's real ones: qdiscs verified
+by sqm on this kernel (`/var/run/sqm/available_qdiscs`: `cake`, `fq_codel`) and
+the QoS scripts in `/usr/lib/sqm/*.qos`.
 
 ## Tool tier
 

@@ -10,12 +10,44 @@ ApplicationWindow {
     visible: true
     title: qsTr("router-console")
 
-    // Interfaces tree state and the tool windows it opens (one per interface).
+    // Tree state and the tool windows it opens (one per interface, one per
+    // config domain).
     property bool interfacesExpanded: true
+    property bool configExpanded: true
     property bool startupWindowOpened: false
+    property bool startupConfigOpened: false
     property var interfaceWindows: []
+    property var configWindows: []
     readonly property string startupInterface:
         typeof startupInterfaceName === "undefined" ? "" : startupInterfaceName
+    readonly property string startupConfig:
+        typeof startupConfigDomain === "undefined" ? "" : startupConfigDomain
+    readonly property string startupStage:
+        typeof startupStageValue === "undefined" ? "" : startupStageValue
+
+    function openConfig(domainId) {
+        for (let i = 0; i < configWindows.length; ++i) {
+            if (configWindows[i].domainId === domainId) {
+                configWindows[i].requestActivate()
+                return configWindows[i]
+            }
+        }
+        const window = configWindowComponent.createObject(root, { domainId: domainId })
+        if (!window)
+            return null
+        configWindows.push(window)
+        window.closing.connect(function () {
+            const index = root.configWindows.indexOf(window)
+            if (index >= 0)
+                root.configWindows.splice(index, 1)
+        })
+        return window
+    }
+
+    function closeConfigWindows() {
+        while (configWindows.length > 0)
+            configWindows.pop().close()
+    }
 
     function openInterface(name) {
         for (let i = 0; i < interfaceWindows.length; ++i) {
@@ -43,6 +75,11 @@ ApplicationWindow {
     Component {
         id: interfaceWindowComponent
         InterfaceWindow {}
+    }
+
+    Component {
+        id: configWindowComponent
+        ConfigWindow {}
     }
 
     header: ToolBar {
@@ -166,8 +203,70 @@ ApplicationWindow {
                     font.pixelSize: 11
                 }
 
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 30
+                    color: configHeaderHover.containsMouse ? "#333333" : "transparent"
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 8
+                        text: (root.configExpanded ? "\u25be  " : "\u25b8  ") + qsTr("Config")
+                        color: "#e8e8e8"
+                        font.bold: true
+                        font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                        id: configHeaderHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: root.configExpanded = !root.configExpanded
+                    }
+                }
+
+                // One entry per registry domain; each opens its own staged editor.
+                Column {
+                    id: configList
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 18
+                    visible: root.configExpanded
+                    spacing: 0
+
+                    Repeater {
+                        model: AppEngine.configDomains
+
+                        delegate: Rectangle {
+                            id: configRow
+                            required property string domainId
+                            required property string title
+
+                            width: configList.width
+                            height: 30
+                            color: configRowHover.containsMouse ? "#333333" : "transparent"
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.left: parent.left
+                                anchors.leftMargin: 10
+                                text: configRow.title
+                                color: AppEngine.connected ? "#e8e8e8" : "#7a7a7a"
+                                font.pixelSize: 13
+                            }
+
+                            MouseArea {
+                                id: configRowHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: root.openConfig(configRow.domainId)
+                            }
+                        }
+                    }
+                }
+
                 Repeater {
-                    model: [qsTr("Config"), qsTr("Tools"), qsTr("Plugins")]
+                    model: [qsTr("Tools"), qsTr("Plugins")]
                     delegate: Text {
                         required property string modelData
                         Layout.fillWidth: true
@@ -260,12 +359,19 @@ ApplicationWindow {
         function onStateChanged() {
             if (!AppEngine.connected) {
                 root.closeInterfaceWindows()
+                root.closeConfigWindows()
                 return
             }
             connectDialog.close()
             if (root.startupInterface.length > 0 && !root.startupWindowOpened) {
                 root.startupWindowOpened = true
                 root.openInterface(root.startupInterface)
+            }
+            if (root.startupConfig.length > 0 && !root.startupConfigOpened) {
+                root.startupConfigOpened = true
+                const window = root.openConfig(root.startupConfig)
+                if (window && root.startupStage.length > 0)
+                    window.stageAfterLoad = root.startupStage
             }
         }
     }

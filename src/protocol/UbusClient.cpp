@@ -1,5 +1,7 @@
 #include "UbusClient.h"
 
+#include "UciCodec.h"
+
 #include <QCryptographicHash>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -12,6 +14,8 @@
 #include <QThread>
 
 #include <memory>
+
+namespace UciCodec = Ubus::UciCodec;
 
 namespace {
 
@@ -269,6 +273,133 @@ void UbusClient::fetchDeviceStatus()
              }
 
              emit deviceStatusReceived(snapshot);
+         });
+}
+
+void UbusClient::uciGetConfig(const QString &config, const QString &sectionType)
+{
+    call(QStringLiteral("uci"), QStringLiteral("get"),
+         UciCodec::getTypeArgs(config, sectionType),
+         [this, config](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit uciConfigFailed(error);
+                 return;
+             }
+             emit uciConfigReceived(UciCodec::parseConfig(config, result));
+         });
+}
+
+void UbusClient::uciGetOption(const QString &config, const QString &section, const QString &option)
+{
+    call(QStringLiteral("uci"), QStringLiteral("get"),
+         UciCodec::getOptionArgs(config, section, option),
+         [this, config, section, option](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit uciOptionFailed(error);
+                 return;
+             }
+             emit uciOptionReceived(config, section, option, UciCodec::parseOptionValue(result));
+         });
+}
+
+void UbusClient::uciChanges(const QString &config)
+{
+    call(QStringLiteral("uci"), QStringLiteral("changes"), UciCodec::changesArgs(config),
+         [this, config](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit uciChangesFailed(error);
+                 return;
+             }
+             emit uciChangesReceived(UciCodec::parseChanges(config, result));
+         });
+}
+
+void UbusClient::uciSet(const Ubus::UciSetRequest &request)
+{
+    call(QStringLiteral("uci"), QStringLiteral("set"), UciCodec::setArgs(request),
+         [this, request](const QJsonObject &, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit uciStageFailed(error);
+                 return;
+             }
+             emit uciStaged(request);
+         });
+}
+
+// set* -> apply -> confirm, serialised so the router never sees a commit with a
+// partially written change set. A failure leaves the staged changes in place:
+// the editor reports it and the operator can revert.
+void UbusClient::uciApplyStaged(const QString &config,
+                                const QList<Ubus::UciSetRequest> &requests,
+                                int rollbackTimeoutSeconds)
+{
+    if (requests.isEmpty()) {
+        emit uciApplyFailed({Ubus::Status::InvalidArgument,
+                             QStringLiteral("no staged changes to apply")});
+        return;
+    }
+
+    auto step = std::make_shared<int>(0);
+    auto advance = std::make_shared<std::function<void()>>();
+
+    *advance = [this, config, requests, rollbackTimeoutSeconds, step, advance]() {
+        if (*step < requests.size()) {
+            const Ubus::UciSetRequest request = requests.at(*step);
+            ++(*step);
+            call(QStringLiteral("uci"), QStringLiteral("set"), UciCodec::setArgs(request),
+                 [this, request, advance](const QJsonObject &, const Ubus::Error &error) {
+                     if (!error.isOk()) {
+                         emit uciApplyFailed(error);
+                         return;
+                     }
+                     emit uciStaged(request);
+                     (*advance)();
+                 });
+            return;
+        }
+
+        call(QStringLiteral("uci"), QStringLiteral("apply"),
+             UciCodec::applyArgs(rollbackTimeoutSeconds),
+             [this, requests](const QJsonObject &, const Ubus::Error &error) {
+                 if (!error.isOk()) {
+                     emit uciApplyFailed(error);
+                     return;
+                 }
+                 call(QStringLiteral("uci"), QStringLiteral("confirm"), {},
+                      [this, requests](const QJsonObject &, const Ubus::Error &error) {
+                          if (!error.isOk()) {
+                              emit uciApplyFailed(error);
+                              return;
+                          }
+                          emit uciApplied(int(requests.size()));
+                      });
+             });
+    };
+
+    (*advance)();
+}
+
+void UbusClient::uciRevert(const QString &config)
+{
+    call(QStringLiteral("uci"), QStringLiteral("revert"), UciCodec::revertArgs(config),
+         [this, config](const QJsonObject &, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit uciRevertFailed(error);
+                 return;
+             }
+             emit uciReverted(config);
+         });
+}
+
+void UbusClient::systemReboot()
+{
+    call(QStringLiteral("system"), QStringLiteral("reboot"), {},
+         [this](const QJsonObject &, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit rebootFailed(error);
+                 return;
+             }
+             emit rebootRequested();
          });
 }
 

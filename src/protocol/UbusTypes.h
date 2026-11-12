@@ -123,6 +123,73 @@ struct Error {
     bool isOk() const { return status == Status::Ok && message.isEmpty(); }
 };
 
+// --- UCI (ubus `uci` object) ------------------------------------------------
+//
+// The staged-apply primitive: `get` reads a package, `set` stages an option,
+// `changes` lists what is staged, `apply`+`confirm` commit (with a rollback
+// window), `revert` discards. rpcd 25.12 has no `get_all`; a whole package is
+// read with `get` + a section type, which answers one object per section.
+
+// One section of a UCI package. Values stay strings: UCI has no types, and the
+// domain registry decides how a field is edited.
+struct UciSection {
+    QString name; // .name, e.g. "eth1" or "cfg01e48a" for anonymous sections
+    QString type; // .type, e.g. "queue"
+    bool anonymous = false;
+    int index = 0;
+    QMap<QString, QString> options;
+
+    bool hasOption(const QString &option) const { return options.contains(option); }
+    QString option(const QString &name) const { return options.value(name); }
+};
+
+struct UciConfig {
+    QString name; // uci package, e.g. "sqm"
+    QList<UciSection> sections;
+
+    bool isEmpty() const { return sections.isEmpty(); }
+
+    const UciSection *section(const QString &name) const
+    {
+        for (const UciSection &candidate : sections) {
+            if (candidate.name == name)
+                return &candidate;
+        }
+        return nullptr;
+    }
+};
+
+// One staged difference as reported by `uci changes`: a 4-tuple
+// ["set", section, option, value], or a 3-tuple for section-level add/delete.
+struct UciChange {
+    QString operation; // set, add, delete
+    QString section;
+    QString option; // empty for section-level changes
+    QString value;
+
+    QString describe() const
+    {
+        if (option.isEmpty())
+            return QStringLiteral("%1 %2").arg(operation, section);
+        return QStringLiteral("%1 %2.%3=%4").arg(operation, section, option, value);
+    }
+};
+
+struct UciChangeSet {
+    QString config;
+    QList<UciChange> changes;
+
+    bool isEmpty() const { return changes.isEmpty(); }
+};
+
+// One option write inside a staged transaction.
+struct UciSetRequest {
+    QString config;
+    QString section;
+    QString option;
+    QString value;
+};
+
 } // namespace Ubus
 
 Q_DECLARE_METATYPE(Ubus::Session)
@@ -133,3 +200,9 @@ Q_DECLARE_METATYPE(Ubus::DeviceStatus)
 Q_DECLARE_METATYPE(Ubus::DeviceStatusSnapshot)
 Q_DECLARE_METATYPE(Ubus::InterfaceInfo)
 Q_DECLARE_METATYPE(QList<Ubus::InterfaceInfo>)
+Q_DECLARE_METATYPE(Ubus::UciSection)
+Q_DECLARE_METATYPE(Ubus::UciConfig)
+Q_DECLARE_METATYPE(Ubus::UciChange)
+Q_DECLARE_METATYPE(Ubus::UciChangeSet)
+Q_DECLARE_METATYPE(Ubus::UciSetRequest)
+Q_DECLARE_METATYPE(QList<Ubus::UciSetRequest>)
