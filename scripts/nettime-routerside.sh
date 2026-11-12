@@ -5,5 +5,5 @@
 #
 # Nothing else in this repository may spell it: the client's own plugin is
 # `nettime`, and only the binding to the router-side service needs this name.
-NETTIME_ROUTER_OBJECT=nettime
+NETTIME_ROUTER_OBJECT=jxs-nettime
 NETTIME_ROUTER_APK_PREFIX="$NETTIME_ROUTER_OBJECT"
