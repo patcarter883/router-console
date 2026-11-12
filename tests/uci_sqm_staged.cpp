@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 the router-console authors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -12,6 +15,7 @@
 #include "config/ConfigEditor.h"
 #include "config/ConfigModels.h"
 #include "protocol/UbusClient.h"
+#include "vm_probe.h"
 
 // Milestone 4 star check: edit the SQM download bandwidth from the client's
 // staged editor, prove the changes list holds exactly that change, apply, reboot
@@ -217,6 +221,9 @@ int main(int argc, char *argv[])
             engine.trustCertificate();
         }
     });
+
+    if (const int skip = skipWithoutDevVm(out, hostArg))
+        return skip;
 
     out << "[1] connect " << hostArg << Qt::endl;
     engine.connectTo(hostArg, QString(), user, password);

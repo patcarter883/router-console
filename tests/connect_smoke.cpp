@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 the router-console authors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -5,6 +8,7 @@
 #include <QTimer>
 
 #include "AppEngine.h"
+#include "vm_probe.h"
 
 // Headless connect check against the dev VM: drives the same AppEngine the QML
 // window uses and asserts the typed board fields arrive. Exit 0 only when the
@@ -26,6 +30,8 @@ int main(int argc, char *argv[])
     parser.process(app);
 
     QTextStream out(stdout);
+    if (const int skip = skipWithoutDevVm(out, parser.value(hostOption)))
+        return skip;
 
     AppEngine engine;
     bool trusted = false;

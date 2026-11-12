@@ -1,5 +1,7 @@
 # router-console
 
+[![ci](https://github.com/patcarter883/router-console/actions/workflows/ci.yml/badge.svg)](https://github.com/patcarter883/router-console/actions/workflows/ci.yml)
+
 A WinBox-parity native desktop client for OpenWrt routers, built with Qt 6 / C++20 / QML,
 running on Linux and Windows. The reference UX is MikroTik WinBox 4 (itself measured to be a
 Qt 6/QML application): connect window with router auto-discovery, left config tree, dockable
@@ -30,6 +32,12 @@ Requires Qt 6.4+ and CMake 3.24+.
 
 Integration tests (`ctest`) run against a local OpenWrt x86 dev VM and skip themselves when
 it is not present — see `docs/dev-vm-recipe.md`.
+
+CI builds the same tree on Linux (GCC, Ninja) and Windows (MSVC 2022) with Qt 6.8 and runs
+the non-VM test surface on both; the Windows zip is a deployable build, its launch check is
+manual (see `docs/windows-build.md`).
+
+SPDX headers on first-party sources: `docs/spdx-headers.md`.
 
 ## License
 
