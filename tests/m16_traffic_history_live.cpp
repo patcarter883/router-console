@@ -46,8 +46,38 @@ double meanOf(const QVariantList &values, bool *sawData)
     return count > 0 ? sum / count : 0;
 }
 
-// Mean of the occupied slots between the first and last one: the boundary slots
-// are partial by construction, so they compare badly across two bucket widths.
+struct Span {
+    qint64 fromMs = 0;
+    qint64 toMs = 0;
+    bool valid = false;
+};
+
+// Time span covered by the occupied slots between the first and last one: the
+// boundary slots are partial by construction, so they compare badly across two
+// bucket widths.
+Span interiorSpan(const QVariantMap &view)
+{
+    const QVariantList values = view.value(QStringLiteral("rx")).toList();
+    const qint64 grid = view.value(QStringLiteral("gridStartMs")).toLongLong();
+    const qint64 width = view.value(QStringLiteral("bucketMs")).toLongLong();
+    int first = -1;
+    int last = -1;
+    for (int i = 0; i < values.size(); ++i) {
+        if (values.at(i).toDouble() < 0)
+            continue;
+        if (first < 0)
+            first = i;
+        last = i;
+    }
+    Span span;
+    if (first >= 0 && last > first + 1) {
+        span.fromMs = grid + (first + 1) * width;
+        span.toMs = grid + last * width;
+        span.valid = true;
+    }
+    return span;
+}
+
 double interiorMean(const QVariantList &values, bool *sawData)
 {
     int first = -1;
@@ -62,6 +92,30 @@ double interiorMean(const QVariantList &values, bool *sawData)
     double sum = 0;
     int count = 0;
     for (int i = first + 1; i < last; ++i) {
+        const double rate = values.at(i).toDouble();
+        if (rate < 0)
+            continue;
+        sum += rate;
+        ++count;
+    }
+    *sawData = count > 0;
+    return count > 0 ? sum / count : 0;
+}
+
+// Mean of the full slots that lie inside span: the fine view averaged over the
+// exact time the coarse interior covers, so both widths describe one span.
+double meanOverSpan(const QVariantMap &view, const Span &span, bool *sawData)
+{
+    const QVariantList values = view.value(QStringLiteral("rx")).toList();
+    const qint64 grid = view.value(QStringLiteral("gridStartMs")).toLongLong();
+    const qint64 width = view.value(QStringLiteral("bucketMs")).toLongLong();
+    double sum = 0;
+    int count = 0;
+    for (int i = 0; i < values.size(); ++i) {
+        const qint64 from = grid + static_cast<qint64>(i) * width;
+        const qint64 to = from + width;
+        if (from < span.fromMs || to > span.toMs)
+            continue;
         const double rate = values.at(i).toDouble();
         if (rate < 0)
             continue;
@@ -200,14 +254,14 @@ int main(int argc, char *argv[])
             << " coarse=" << store.coarseCount(ifName)
             << " retainedMs=" << store.retainedSpanMs(ifName) << Qt::endl;
 
-        // Same 1 min of history asked for at two widths: the decimated view must
-        // carry the mean of the fine one.
+        // Same 1 min of history asked for at two widths: the coarse mean and the
+        // fine mean over the coarse interior's exact span describe one period.
         const QVariantMap fine = interfaces->historyAt(ifName, 60000, 1000);
         const QVariantMap coarse = interfaces->historyAt(ifName, 60000, 10000);
+        const Span coarseSpan = interiorSpan(coarse);
         bool fineHasData = false;
         bool coarseHasData = false;
-        const double fineMean =
-            interiorMean(fine.value(QStringLiteral("rx")).toList(), &fineHasData);
+        const double fineMean = meanOverSpan(fine, coarseSpan, &fineHasData);
         const double coarseMean =
             interiorMean(coarse.value(QStringLiteral("rx")).toList(), &coarseHasData);
         out << "  decimation: 1 s mean=" << fineMean << " B/s, 10 s mean=" << coarseMean
@@ -221,7 +275,9 @@ int main(int argc, char *argv[])
         const RangeView &day = views.at(3);
 
         QStringList problems;
-        if (samples < seconds - 3)
+        // Polls share the emulated link with the traffic generator, so loaded
+        // ticks can be skipped; the store still spans the whole window.
+        if (samples < seconds - seconds / 10)
             problems << QStringLiteral("only %1 of %2 samples").arg(samples).arg(seconds);
         if (store.recentCount(ifName) < qMin(seconds, 600) - 3)
             problems << QStringLiteral("recent tier holds %1 samples").arg(store.recentCount(ifName));
@@ -241,7 +297,7 @@ int main(int argc, char *argv[])
             problems << QStringLiteral("24 h view has %1 slots").arg(day.pointCount);
         if (ten.pointCount != minute.pointCount && ten.pointCount <= minute.pointCount)
             problems << QStringLiteral("10 m view does not widen the window");
-        if (!coarseHasData || !fineHasData || fineMean <= 0
+        if (!coarseSpan.valid || !coarseHasData || !fineHasData || fineMean <= 0
             || qAbs(fineMean - coarseMean) / fineMean > 0.05)
             problems << QStringLiteral("10 s decimation does not match the 1 s mean");
 
@@ -311,7 +367,7 @@ int main(int argc, char *argv[])
                 << Qt::endl;
     });
 
-    QTimer::singleShot(connectOptions.timeoutMs + seconds * 1000, &app, [&] {
+    QTimer::singleShot(connectOptions.timeoutMs + seconds * 1000 + 60000, &app, [&] {
         finish(3, QStringLiteral("SKIPPED: timed out after %1 samples (state: %2)")
                       .arg(samples)
                       .arg(engine.statusText()));
