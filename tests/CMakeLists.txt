@@ -1,5 +1,10 @@
 enable_testing()
 
+# The VM tests drive whatever router answers here; a second instance (another
+# worktree's private lab VM) is selected with -DRC_TEST_HOST=127.0.0.1:20443.
+set(RC_TEST_HOST "127.0.0.1:10443" CACHE STRING "router host[:port] for the VM tests")
+set(RC_TEST_SSH_PORT "10022" CACHE STRING "router ssh forward of the same VM")
+
 add_executable(connect-smoke connect_smoke.cpp)
 target_link_libraries(connect-smoke PRIVATE router-console-core)
 
@@ -177,3 +182,38 @@ add_test(NAME sqm-stats
          COMMAND sqm-stats --host 127.0.0.1:10443 --user root --password root
                  --accept-new-cert --section eth1 --device eth1)
 set_tests_properties(sqm-stats PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 180)
+
+# --- Milestone 12: daily-driver trio ----------------------------------------
+# Container, log-line and lease-JSON shapes without a router.
+add_executable(m12-archive-codec m12_archive_codec.cpp)
+target_link_libraries(m12-archive-codec PRIVATE router-console-core)
+add_test(NAME m12-archive-codec COMMAND m12-archive-codec)
+set_tests_properties(m12-archive-codec PROPERTIES TIMEOUT 30)
+
+# Log viewer: `logread` window parsed, poller picks up a line the router writes,
+# pause freezes the tail and the filter narrows rows.
+add_executable(m12-log-view m12_log_view.cpp)
+target_link_libraries(m12-log-view PRIVATE router-console-core)
+add_test(NAME m12-log-view
+         COMMAND m12-log-view --host ${RC_TEST_HOST} --user root --password root
+                 --accept-new-cert --ssh-port ${RC_TEST_SSH_PORT} --min-entries 20)
+set_tests_properties(m12-log-view PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 90)
+
+# DHCP leases: live-lease surface answers, and the reservation that
+# scripts/vm-m12-fixtures.sh installs is in the table with its address and mac.
+add_executable(m12-dhcp-leases m12_dhcp_leases.cpp)
+target_link_libraries(m12-dhcp-leases PRIVATE router-console-core)
+add_test(NAME m12-dhcp-leases
+         COMMAND m12-dhcp-leases --host ${RC_TEST_HOST} --user root --password root
+                 --accept-new-cert --reserve-hostname rc-m12-reserved
+                 --reserve-address 192.168.77.240 --reserve-mac 52:54:00:12:34:56)
+set_tests_properties(m12-dhcp-leases PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 60)
+
+# Config backup: archive of /etc/config + manifest, and restore staged under
+# /tmp/router-console-restore with a byte-identical round trip.
+add_executable(m12-config-backup m12_config_backup.cpp)
+target_link_libraries(m12-config-backup PRIVATE router-console-core)
+add_test(NAME m12-config-backup
+         COMMAND m12-config-backup --host ${RC_TEST_HOST} --user root --password root
+                 --accept-new-cert)
+set_tests_properties(m12-config-backup PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 120)

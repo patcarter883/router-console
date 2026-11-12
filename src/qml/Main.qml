@@ -33,7 +33,10 @@ ApplicationWindow {
         { id: "portscan", title: qsTr("Port Scan") },
         { id: "torch", title: qsTr("Torch") },
         { id: "files", title: qsTr("Files") },
-        { id: "sqm", title: qsTr("SQM / CAKE stats") }
+        { id: "sqm", title: qsTr("SQM / CAKE stats") },
+        { id: "log", title: qsTr("Log") },
+        { id: "leases", title: qsTr("DHCP leases") },
+        { id: "backup", title: qsTr("Config backup") }
     ]
     readonly property string startupInterface:
         typeof startupInterfaceName === "undefined" ? "" : startupInterfaceName
@@ -157,6 +160,9 @@ ApplicationWindow {
         case "torch": return torchWindowComponent
         case "files": return filesWindowComponent
         case "sqm": return sqmStatsWindowComponent
+        case "log": return logWindowComponent
+        case "leases": return leasesWindowComponent
+        case "backup": return backupWindowComponent
         }
         return null
     }
@@ -172,6 +178,9 @@ ApplicationWindow {
     Component { id: torchWindowComponent; TorchWindow {} }
     Component { id: filesWindowComponent; FilesWindow {} }
     Component { id: sqmStatsWindowComponent; SqmStatsWindow {} }
+    Component { id: logWindowComponent; LogWindow {} }
+    Component { id: leasesWindowComponent; LeasesWindow {} }
+    Component { id: backupWindowComponent; BackupWindow {} }
 
     Component {
         id: interfaceWindowComponent

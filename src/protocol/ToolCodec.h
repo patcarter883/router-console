@@ -51,4 +51,20 @@ QList<ConntrackFlow> parseConntrack(const QString &nfConntrack);
 // `rpc-sys upgrade_test` -> the sysupgrade(8) verdict in stdout/stderr.
 SysupgradeCheck parseSysupgradeCheck(const QJsonObject &result);
 
+// `file exec logread -l N` -> one entry per line. A line whose header does not
+// match stays an entry with the whole text as its message.
+QJsonObject logReadArgs(int lines);
+QList<LogEntry> parseLogEntries(const QString &stdoutText);
+
+// `luci-rpc getDHCPLeases` -> dhcp_leases + dhcp6_leases
+// (fields from LuCI's own consumer, /www/luci-static/resources/view/status/
+// include/40_dhcp.js: ipaddr, ip6addrs, macaddr, hostname, expires, interface).
+QList<DhcpLease> parseDhcpLeases(const QJsonObject &result);
+
+// `uci get {config:"dhcp", type:"host"}` -> one row per reservation.
+QList<DhcpLease> parseLeaseHosts(const QJsonObject &result);
+
+// `uci configs` -> the package names the router has a file for.
+QStringList parseConfigNames(const QJsonObject &result);
+
 } // namespace Ubus::ToolCodec

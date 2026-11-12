@@ -71,9 +71,21 @@ public slots:
     void fileRead(const QString &path);
     void fileWrite(const QString &path, const QByteArray &data);
     void fileRemove(const QString &path);
+    // Tagged variants: the caller gets its own reply channel, so the file
+    // manager, the backup tool and the restore staging never consume each
+    // other's results.
+    void fileReadTagged(const QString &tag, const QString &path);
+    void fileWriteTagged(const QString &tag, const QString &path, const QByteArray &data);
+    void execTagged(const QString &tag, const QString &command, const QStringList &params);
     void sysupgradeTest();
     void sysupgradeStart();
     void packageInstall(const QStringList &packages);
+
+    // Daily-driver tier: the syslog tail, the DHCP lease table and the config
+    // backup's file/config enumeration.
+    void fetchLog(int lines);
+    void fetchDhcpLeases();
+    void fetchConfigNames();
 
 
 signals:
@@ -131,6 +143,18 @@ signals:
     void sysupgradeStartFailed(const Ubus::Error &error);
     void packageInstallFinished(const Ubus::ExecResult &result);
     void packageInstallFailed(const Ubus::Error &error);
+    void logReceived(const QList<Ubus::LogEntry> &entries);
+    void logFailed(const Ubus::Error &error);
+    void leasesReceived(const QList<Ubus::DhcpLease> &leases);
+    void leasesFailed(const Ubus::Error &error);
+    void configNamesReceived(const QStringList &names);
+    void configNamesFailed(const Ubus::Error &error);
+    void fileReadTaggedFinished(const QString &tag, const QString &path, const QByteArray &data);
+    void fileReadTaggedFailed(const QString &tag, const Ubus::Error &error);
+    void fileWriteTaggedFinished(const QString &tag, const QString &path, int bytes);
+    void fileWriteTaggedFailed(const QString &tag, const Ubus::Error &error);
+    void execTaggedFinished(const QString &tag, const Ubus::ExecResult &result);
+    void execTaggedFailed(const QString &tag, const Ubus::Error &error);
 
 private:
     using ResultHandler = std::function<void(const QJsonObject &result, const Ubus::Error &error)>;

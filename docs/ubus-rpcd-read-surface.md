@@ -269,6 +269,78 @@ and the rules' `icmp_type`/address/port lists are editable.
   output via rpcd file/exec (`/usr/libexec/sqm` helpers run as root) and parse.
   cake_mq-aware: iterate all cake instances when backported kernels land.
 
+## Daily-driver tier: log, DHCP leases, config backup
+
+Measured on 25.12.6 (2026-11-13, private VM instance on 127.0.0.1:20443).
+
+### Syslog
+
+- The ubus `log` object exists (`log read {lines, stream, oneshot}`), but on this
+  image `ubus call log read '{"lines":5}'` answers **empty** — the object's read
+  path needs the live `/dev/log` socket consumer, and the buffer `logread` reads
+  is not what it returns. Measured, both with `oneshot` and without.
+- `logread -f` follows the socket and never returns, so rpcd `file exec` would
+  never answer. Working surface: **`file exec /sbin/logread -l <N>`**, a bounded
+  window of N complete lines (~20 KB of stdout for N=200, immediate reply).
+- The window is polled (2 s) and diffed client-side: `logread` has no sequence
+  number, so new lines are the poll's window tail after the largest overlap with
+  the previous window. A window with no overlap (log rolled, or a long gap) is
+  taken whole — the UI never claims to be lossless.
+- Line shape: ctime header (`Thu Nov 12 14:42:57 2026`), then
+  `<facility>.<level>`, then `source: message` (`kern.notice kernel: [ 0.000000]
+  ...`, `authpriv.info dropbear[5575]: ...`). A line with no such header is kept
+  whole as the message.
+- ACL: `/sbin/logread` needs `exec` in the read section.
+
+### DHCP leases
+
+- Two surfaces, merged into one table:
+  - **live leases** — `luci-rpc getDHCPLeases {}` →
+    `{"dhcp_leases":[{ipaddr,macaddr,hostname,expires,interface,duid,iaid}...],
+    "dhcp6_leases":[{ip6addrs[],macaddr,duid,iaid,hostname,expires}...]}`.
+    Field names confirmed against LuCI's own consumer,
+    `/www/luci-static/resources/view/status/include/40_dhcp.js`. `expires` is
+    `false` for "never" and the remaining seconds otherwise.
+  - **reservations** — `uci get {"config":"dhcp","type":"host"}` (section type
+    `host`, `name`/`ip`/`mac`/`duid`). Reservations are config, not leases, so
+    LuCI's lease surface does not list them; the client merges them and marks the
+    row `reservation`.
+- `dhcp ipv6leases` exists but answers per-device empty lease arrays on a VM with
+  no IPv6 client; `odhcpd` is not exposed as its own ubus object; the dnsmasq
+  object only has `metrics`.
+- **No dynamic leases exist on the dev VM, and that is a measured property of the
+  lab, not a client bug**: `/tmp/dhcp.leases` (the dnsmasq leasefile) is 0 bytes.
+  A DHCP client on br-lan gets its offer from QEMU's slirp DHCP
+  (`udhcpc -i br-lan` → `lease of 192.168.77.100 obtained from 192.168.77.2`),
+  which does not write dnsmasq's leasefile. `scripts/vm-m12-fixtures.sh` installs
+  one `config host` reservation so the table has a stable row to assert on; the
+  live-lease parse path is covered by the JSON-shape test in
+  `tests/m12_archive_codec.cpp`.
+- ACL: `luci-rpc getDHCPLeases` (read), `uci` already grants `get` on `dhcp`.
+
+### Config backup / restore
+
+- Config set: **`uci configs`** (read `configs` ACL) answers
+  `{"configs":["network","dhcp",...]}`; each file is read with `file read
+  {path:"/etc/config/<name>", base64:true}`.
+- Manifest: `file exec /usr/bin/apk list --installed` (226 lines on the VM).
+  A router without apk still backs up, with the reason recorded in MANIFEST.txt.
+- Archive: `.tar.gz` built client-side — ustar headers plus a gzip container whose
+  deflate stream uses **stored blocks**. `gzip -t`, `file` and `tar -tzf` all read
+  it (verified); the config set is tens of kilobytes, so no compression step and
+  no zlib dependency is worth it. Member names are relative and validated
+  (`..`, leading `/`, empty segments rejected).
+- Restore stages, never applies: files go to
+  `/tmp/router-console-restore/etc/config/<name>`, the window lists every staged
+  path with its size, and only an explicit confirm writes them to
+  `/etc/config/<name>`. Router recovery from a bad restore is out of scope.
+- **`file write` does not create parent directories** (measured: writing
+  `/tmp/router-console-restore/etc/config/x` on a missing tree answers
+  `Not found`), so staging runs `file exec /bin/mkdir -p` first. ACL: `/bin/mkdir`
+  `exec`.
+- Writes are per file, so a restore of N configs is N `file write` calls; the tool
+  issues them one at a time and reports each.
+
 ## Custom app surface (the plugin contract)
 
 Each custom LuCI app exposes its data one of two ways; the client plugin

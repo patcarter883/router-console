@@ -1,6 +1,6 @@
 {
 	"router-console": {
-		"description": "router-console native client: staged UCI editing across the core config domains, plus the tool tier (exec, files, sysupgrade test, conntrack, qdisc stats)",
+		"description": "router-console native client: staged UCI editing across the core config domains, plus the tool tier (exec, files, sysupgrade test, conntrack, qdisc stats, logread, DHCP leases)",
 		"read": {
 			"file": {
 				"/": [ "list" ],
@@ -11,14 +11,17 @@
 				"/bin/ping": [ "exec" ],
 				"/bin/ping6": [ "exec" ],
 				"/bin/traceroute": [ "exec" ],
+				"/sbin/logread": [ "exec" ],
+				"/bin/mkdir": [ "exec" ],
 				"/bin/cat": [ "exec" ],
 				"/sbin/tc": [ "exec" ],
 				"/bin/sh": [ "exec" ]
 			},
 			"ubus": {
-				"uci": [ "get", "state", "changes" ],
+				"uci": [ "get", "state", "changes", "configs" ],
 				"file": [ "list", "read", "stat", "lstat", "md5" ],
 				"luci": [ "getConntrackList", "getRealtimeStats", "getMountPoints", "getBlockDevices" ],
+				"luci-rpc": [ "getDHCPLeases" ],
 				"rpc-sys": [ "packagelist" ]
 			},
 			"uci": [ "system", "network", "wireless", "firewall", "dhcp", "sqm" ]
