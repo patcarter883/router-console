@@ -7,6 +7,7 @@
 
 #include "vm_fixture.h"
 #include "tools/PingTool.h"
+#include "vm_probe.h"
 
 // Tool-tier check for the ping window: issue ICMP echoes from inside the VM to a
 // live target and require real replies with measured RTTs.
@@ -27,6 +28,8 @@ int main(int argc, char *argv[])
     connectOptions.read(parser);
 
     QTextStream out(stdout);
+    if (const int code = skipWithoutDevVm(out, connectOptions.host))
+        return code;
     AppEngine engine;
     auto *ping = qobject_cast<PingTool *>(engine.pingTool());
     if (!ping) {

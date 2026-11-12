@@ -7,6 +7,7 @@
 
 #include "vm_fixture.h"
 #include "tools/TracerouteTool.h"
+#include "vm_probe.h"
 
 // Tool-tier check for the traceroute window: the router traces a live target and
 // the first hop must be a real address with a measured RTT.
@@ -27,6 +28,8 @@ int main(int argc, char *argv[])
     connectOptions.read(parser);
 
     QTextStream out(stdout);
+    if (const int code = skipWithoutDevVm(out, connectOptions.host))
+        return code;
     AppEngine engine;
     auto *trace = qobject_cast<TracerouteTool *>(engine.tracerouteTool());
     if (!trace) {

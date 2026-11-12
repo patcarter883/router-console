@@ -7,6 +7,7 @@
 #include "AppEngine.h"
 #include "plugins/PluginHub.h"
 #include "plugins/PluginSession.h"
+#include "vm_probe.h"
 
 // Data-plane check for one plugin against the dev VM: connect, open the plugin
 // session exactly as PluginWindow does, and assert the view model receives the
@@ -224,6 +225,8 @@ int main(int argc, char *argv[])
     parser.process(app);
 
     QTextStream out(stdout);
+    if (const int code = skipWithoutDevVm(out, parser.value(hostOption)))
+        return code;
     const QString pluginId = parser.value(pluginOption);
     if (pluginId.isEmpty()) {
         out << "FAILED: --plugin is required" << Qt::endl;

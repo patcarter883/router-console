@@ -10,6 +10,7 @@
 
 #include "vm_fixture.h"
 #include "tools/FilesTool.h"
+#include "vm_probe.h"
 
 // Sysupgrade path check without flashing anything: stage a fake image at
 // /tmp/firmware.bin and require rpc-sys upgrade_test to reject it with the
@@ -31,6 +32,8 @@ int main(int argc, char *argv[])
     connectOptions.read(parser);
 
     QTextStream out(stdout);
+    if (const int code = skipWithoutDevVm(out, connectOptions.host))
+        return code;
     const QString fakeImage = QDir(parser.value(scratchOption)).filePath(
         QStringLiteral("rc-fake-firmware.bin"));
 

@@ -91,6 +91,13 @@ add_test(NAME plugin-stub
                  ${CMAKE_SOURCE_DIR})
 set_tests_properties(plugin-stub PROPERTIES TIMEOUT 60)
 
+if(WIN32)
+    # The stub proof drives a bash script; Windows CI proves the build, not
+    # shell-based repo hygiene, so the check stays on the platforms that have
+    # the shell it needs.
+    set_tests_properties(plugin-stub PROPERTIES DISABLED TRUE)
+endif()
+
 # One data test per custom app, against the dev VM (fixtures installed by
 # scripts/vm-mock-apps.sh). Each opens the plugin session the window opens and
 # asserts the view model received the app's own data shape.
