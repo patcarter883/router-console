@@ -197,6 +197,9 @@ private:
     void post(const QByteArray &body, ResultHandler handler);
     void queueAfterLogin(const QString &object, const QString &method, const QJsonObject &args,
                          ResultHandler handler, bool allowRelogin);
+    // Opens the session without touching the parking queue, for a renewal that
+    // the queue itself triggered.
+    void startSession(const QUrl &endpoint, const QString &username, const QString &password);
     void sessionExpired();
 
     QNetworkAccessManager *m_nam = nullptr;
@@ -206,7 +209,14 @@ private:
     Ubus::Session m_session;
     QElapsedTimer m_sessionAge;
     QByteArray m_pin;
-    std::function<void()> m_afterLogin;
+    // Requests parked while a session (re)login is in flight. A single slot here
+    // lost whichever request lost the race, which left its caller waiting forever
+    // — the 1 Hz sampler stalled silently at the second session renewal.
+    struct PendingCall {
+        std::function<void()> run;
+        std::function<void(const Ubus::Error &)> fail;
+    };
+    QVector<PendingCall> m_pendingAfterLogin;
     int m_requestId = 0;
     bool m_loggingIn = false;
 };

@@ -170,11 +170,19 @@ UbusClient::UbusClient(QObject *parent)
 
 void UbusClient::login(const QUrl &endpoint, const QString &username, const QString &password)
 {
+    // An explicit login is a fresh session: nothing parked for the old one
+    // survives it.
+    m_pendingAfterLogin.clear();
+    startSession(endpoint, username, password);
+}
+
+void UbusClient::startSession(const QUrl &endpoint, const QString &username,
+                             const QString &password)
+{
     m_endpoint = endpoint;
     m_username = username;
     m_password = password;
     m_session = {};
-    m_afterLogin = nullptr;
     m_loggingIn = true;
 
     const QJsonObject args{{QStringLiteral("username"), username},
@@ -183,8 +191,11 @@ void UbusClient::login(const QUrl &endpoint, const QString &username, const QStr
             args, [this](const QJsonObject &result, const Ubus::Error &error) {
                 m_loggingIn = false;
                 if (!error.isOk()) {
-                    m_afterLogin = nullptr;
+                    const QVector<PendingCall> pending = std::move(m_pendingAfterLogin);
+                    m_pendingAfterLogin.clear();
                     emit loginFailed(error);
+                    for (const PendingCall &call : pending)
+                        call.fail(error);
                     return;
                 }
 
@@ -194,9 +205,13 @@ void UbusClient::login(const QUrl &endpoint, const QString &username, const QStr
                 session.username =
                     result.value(QStringLiteral("data")).toObject().value(QStringLiteral("username")).toString();
                 if (!session.isValid()) {
-                    m_afterLogin = nullptr;
-                    emit loginFailed({Ubus::Status::UnknownError,
-                                      QStringLiteral("login reply carried no session token")});
+                    const Ubus::Error invalid{Ubus::Status::UnknownError,
+                                              QStringLiteral("login reply carried no session token")};
+                    const QVector<PendingCall> pending = std::move(m_pendingAfterLogin);
+                    m_pendingAfterLogin.clear();
+                    emit loginFailed(invalid);
+                    for (const PendingCall &call : pending)
+                        call.fail(invalid);
                     return;
                 }
 
@@ -204,11 +219,10 @@ void UbusClient::login(const QUrl &endpoint, const QString &username, const QStr
                 m_sessionAge.start();
                 emit loggedIn(session);
 
-                if (m_afterLogin) {
-                    const auto next = std::move(m_afterLogin);
-                    m_afterLogin = nullptr;
-                    next();
-                }
+                const QVector<PendingCall> pending = std::move(m_pendingAfterLogin);
+                m_pendingAfterLogin.clear();
+                for (const PendingCall &call : pending)
+                    call.run();
             });
 }
 
@@ -1052,7 +1066,7 @@ void UbusClient::frrRestartAndProbe(const QString &path)
 void UbusClient::closeSession()
 {
     m_session = {};
-    m_afterLogin = nullptr;
+    m_pendingAfterLogin.clear();
 }
 
 void UbusClient::sessionExpired()
@@ -1101,11 +1115,13 @@ void UbusClient::queueAfterLogin(const QString &object, const QString &method,
                                  const QJsonObject &args, ResultHandler handler,
                                  bool allowRelogin)
 {
-    m_afterLogin = [this, object, method, args, handler, allowRelogin] {
-        call(object, method, args, handler, allowRelogin);
-    };
+    m_pendingAfterLogin.append(
+        PendingCall{[this, object, method, args, handler, allowRelogin] {
+                        call(object, method, args, handler, allowRelogin);
+                    },
+                    [handler](const Ubus::Error &error) { handler({}, error); }});
     if (!m_loggingIn)
-        login(m_endpoint, m_username, m_password);
+        startSession(m_endpoint, m_username, m_password);
 }
 
 void UbusClient::callRaw(const QString &sessionToken, const QString &object,

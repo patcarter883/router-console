@@ -3,7 +3,10 @@
 
 #include "InterfacesModel.h"
 
+#include <QHash>
 #include <QMetaObject>
+
+#include <cstdio>
 
 #include "protocol/UbusClient.h"
 
@@ -45,6 +48,10 @@ InterfacesModel::InterfacesModel(UbusClient *client, QObject *parent)
     m_timer.setInterval(1000);
     m_timer.setTimerType(Qt::PreciseTimer);
     connect(&m_timer, &QTimer::timeout, this, &InterfacesModel::requestStatus);
+
+    // One clock for the object's lifetime: history timestamps must keep
+    // increasing across a disconnect and reconnect within the same session.
+    m_clock.start();
 }
 
 int InterfacesModel::rowCount(const QModelIndex &parent) const
@@ -144,7 +151,6 @@ void InterfacesModel::start()
     m_dumpInFlight = true;
     m_ticksSinceDump = 0;
     m_lastSampleMs = -1;
-    m_clock.start();
 
     QMetaObject::invokeMethod(m_client, &UbusClient::fetchInterfaces, Qt::QueuedConnection);
     m_timer.start();
@@ -262,6 +268,10 @@ void InterfacesModel::onDeviceStatusReceived(const Ubus::DeviceStatusSnapshot &s
         row.previousTxBytes = txBytes;
         row.rxRate = rxRate;
         row.txRate = txRate;
+
+        // Every interface with a live device feeds the store, whether or not a
+        // graph window exists for it.
+        m_history.append(row.info.name, nowMs, rxRate, txRate);
     }
 
     m_lastSampleMs = nowMs;
@@ -282,6 +292,62 @@ void InterfacesModel::appendHistory(Row &row, double rxRate, double txRate) cons
         row.rxHistory.remove(0, row.rxHistory.size() - historyPoints);
     if (row.txHistory.size() > historyPoints)
         row.txHistory.remove(0, row.txHistory.size() - historyPoints);
+}
+
+QVariantMap InterfacesModel::historyAt(const QString &ifName, qint64 windowMs,
+                                       qint64 bucketMs) const
+{
+    const TrafficHistory::Trace trace = m_history.trace(ifName, m_clock.elapsed(), windowMs,
+                                                        bucketMs);
+    QVariantList rx;
+    QVariantList tx;
+    rx.reserve(trace.points.size());
+    tx.reserve(trace.points.size());
+    for (const TrafficHistory::Bucket &bucket : trace.points) {
+        rx.append(bucket.rx);
+        tx.append(bucket.tx);
+    }
+
+    QVariantMap values;
+    values.insert(QStringLiteral("ifName"), ifName);
+    values.insert(QStringLiteral("windowMs"), trace.windowMs);
+    values.insert(QStringLiteral("bucketMs"), trace.bucketMs);
+    values.insert(QStringLiteral("fromMs"), trace.fromMs);
+    values.insert(QStringLiteral("toMs"), trace.toMs);
+    values.insert(QStringLiteral("coveredFromMs"), trace.coveredFromMs);
+    values.insert(QStringLiteral("coveredMs"), trace.coveredFromMs < 0
+                                                   ? 0
+                                                   : trace.toMs - trace.coveredFromMs);
+    values.insert(QStringLiteral("rawSamples"), trace.rawSamples);
+    values.insert(QStringLiteral("slots"), trace.points.size());
+    values.insert(QStringLiteral("gridStartMs"),
+                  trace.points.isEmpty() ? trace.fromMs : trace.points.first().startMs);
+    values.insert(QStringLiteral("rx"), rx);
+    values.insert(QStringLiteral("tx"), tx);
+    return values;
+}
+
+QVariantMap InterfacesModel::history(const QString &ifName, qint64 windowMs) const
+{
+    return historyAt(ifName, windowMs, 0);
+}
+
+void InterfacesModel::clearHistory()
+{
+    m_history.clear();
+}
+
+void InterfacesModel::reportGraphPaint(int bucketMs, int points, double averageMs, int paints)
+{
+    GraphPaint &stat = m_paintStats[static_cast<qint64>(bucketMs)];
+    stat.reportedMs += averageMs;
+    stat.reports += 1;
+    if (!qEnvironmentVariableIsSet("RC_PAINT_STATS"))
+        return;
+    std::fprintf(stderr, "rc-paint bucketMs=%d points=%d ms=%.2f avg=%.2f paints=%d reports=%d\n",
+                 bucketMs, points, averageMs, stat.reportedMs / stat.reports, paints,
+                 stat.reports);
+    std::fflush(stderr);
 }
 
 void InterfacesModel::onRequestFailed(const Ubus::Error &error)

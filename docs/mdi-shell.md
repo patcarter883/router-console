@@ -80,7 +80,7 @@ into its body and drives size; the view keeps every behaviour it had.
 
 Used by the evidence scripts and by CI, all repeatable:
 
-    --open-interface br-lan --open-interface lan
+    --open-interface lan --interface-range 24h   # the graph window's time range
     --open-routing routes --open-routing ospf
     --open-tool log --open-tool terminal
     --open-config sqm --open-plugin modemaim
@@ -88,4 +88,5 @@ Used by the evidence scripts and by CI, all repeatable:
 
 `scripts/m15-shot.sh multi|tile|restored` captures the shell on a headless X
 server (`:101`), and `tests/m15_mdi_structure.sh` fails the suite if a view ever
-goes back to being a top-level window.
+goes back to being a top-level window. The interface window's stored history and
+its 1m/10m/1h/24h ranges are described in `docs/traffic-history.md`.

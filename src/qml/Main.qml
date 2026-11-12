@@ -51,6 +51,8 @@ ApplicationWindow {
     // prefix so no property shadows the import it reads.
     readonly property var bootInterfaces:
         typeof startupInterfaces === "undefined" ? [] : startupInterfaces
+    readonly property string bootInterfaceRange:
+        typeof startupInterfaceRange === "undefined" ? "" : startupInterfaceRange
     readonly property var bootConfigs:
         typeof startupConfigDomains === "undefined" ? [] : startupConfigDomains
     readonly property var bootRouting:
@@ -149,9 +151,10 @@ ApplicationWindow {
 
     // --- View openers ------------------------------------------------------
 
-    function openInterface(name) {
+    function openInterface(name, range) {
         return openWindow("interface/" + name, qsTr("Interface %1").arg(name),
-                          interfaceWindowComponent, { ifName: name })
+                          interfaceWindowComponent,
+                          { ifName: name, initialRange: range || "10m" })
     }
 
     function openConfig(domainId, initialSection) {
@@ -206,7 +209,7 @@ ApplicationWindow {
 
     function applyStartupWindows() {
         for (let i = 0; i < bootInterfaces.length; ++i)
-            root.openInterface(bootInterfaces[i])
+            root.openInterface(bootInterfaces[i], bootInterfaceRange)
         for (let i = 0; i < bootConfigs.length; ++i) {
             const frame = root.openConfig(bootConfigs[i], "")
             if (frame && bootStage.length > 0 && frame.content)

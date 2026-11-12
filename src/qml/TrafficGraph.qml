@@ -3,26 +3,41 @@
 
 import QtQuick
 
-// Rolling RX/TX line graph for one interface. Both series are byte-per-second
-// values, newest on the right; the window is fixed at `capacity` samples so the
-// trace scrolls left as samples arrive. Drawn with Canvas, no chart module.
+// RX/TX line graph over a stored history window. The series are one value per
+// grid slot (`bucketMs` wide, slot i centred at gridStartMs + i*bucketMs), a
+// negative value marks a slot with no measurement and breaks the line. Drawing
+// is linear in the slot count, which the range selector caps at 1500.
 Item {
     id: graph
 
     property var rxSeries: []
     property var txSeries: []
-    property int capacity: 120
+    property real gridStartMs: 0
+    property real fromMs: 0
+    property real toMs: 0
+    property int bucketMs: 1000
     property color rxColor: "#3fbf6a"
     property color txColor: "#4b9fe8"
     property color gridColor: "#2c2c2c"
     property color axisColor: "#8c8c8c"
     property color backgroundColor: "#151515"
 
+    // Paint cost, accumulated in onPaint and reported from the GUI thread (the
+    // paint callback runs on the render thread, where calling into the model is
+    // not allowed).
+    property real paintMs: 0
+    property int paintCount: 0
+    property int reported: 0
+
     implicitHeight: 200
     implicitWidth: 480
 
     onRxSeriesChanged: canvas.requestPaint()
     onTxSeriesChanged: canvas.requestPaint()
+    onGridStartMsChanged: canvas.requestPaint()
+    onFromMsChanged: canvas.requestPaint()
+    onToMsChanged: canvas.requestPaint()
+    onBucketMsChanged: canvas.requestPaint()
     onWidthChanged: canvas.requestPaint()
     onHeightChanged: canvas.requestPaint()
 
@@ -36,10 +51,14 @@ Item {
 
     function peak() {
         let peak = 0;
-        for (let i = 0; i < rxSeries.length; ++i)
-            peak = Math.max(peak, rxSeries[i]);
-        for (let i = 0; i < txSeries.length; ++i)
-            peak = Math.max(peak, txSeries[i]);
+        for (let i = 0; i < rxSeries.length; ++i) {
+            if (rxSeries[i] > peak)
+                peak = rxSeries[i];
+        }
+        for (let i = 0; i < txSeries.length; ++i) {
+            if (txSeries[i] > peak)
+                peak = txSeries[i];
+        }
         // A floor keeps an idle graph readable instead of dividing by zero.
         return Math.max(peak, 1024);
     }
@@ -50,6 +69,7 @@ Item {
         anchors.margins: 1
 
         onPaint: {
+            const startedAt = Date.now();
             const ctx = getContext("2d");
             ctx.reset();
 
@@ -90,35 +110,62 @@ Item {
                 ctx.stroke();
             }
 
+            const span = Math.max(1, graph.toMs - graph.fromMs);
+            const step = (graph.bucketMs / span) * plotWidth;
+
             function drawSeries(series, color, fill) {
                 if (!series || series.length === 0)
                     return;
-                const step = plotWidth / (graph.capacity - 1);
-                const offset = graph.capacity - series.length;
-                ctx.beginPath();
+                // One path per contiguous run: a gap in the history means the
+                // client was not sampling, not that traffic was zero.
+                let runStart = -1;
+                const runs = [];
                 for (let i = 0; i < series.length; ++i) {
-                    const x = (offset + i) * step;
-                    const y = top + plotHeight * (1 - Math.min(1, series[i] / peak));
-                    if (i === 0)
-                        ctx.moveTo(x, y);
-                    else
-                        ctx.lineTo(x, y);
+                    const valid = series[i] >= 0;
+                    if (valid && runStart < 0) {
+                        runStart = i;
+                    } else if (!valid && runStart >= 0) {
+                        runs.push([runStart, i - 1]);
+                        runStart = -1;
+                    }
                 }
+                if (runStart >= 0)
+                    runs.push([runStart, series.length - 1]);
+
                 ctx.strokeStyle = color;
                 ctx.lineWidth = 1.4;
-                ctx.stroke();
+                for (let r = 0; r < runs.length; ++r) {
+                    const first = runs[r][0];
+                    const last = runs[r][1];
+                    const xOf = (i) => (graph.gridStartMs + (i + 0.5) * graph.bucketMs
+                                        - graph.fromMs) / span * plotWidth;
+                    ctx.beginPath();
+                    for (let i = first; i <= last; ++i) {
+                        const x = xOf(i);
+                        const y = top + plotHeight * (1 - Math.min(1, series[i] / peak));
+                        if (i === first)
+                            ctx.moveTo(x, y);
+                        else
+                            ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
 
-                if (fill) {
-                    ctx.lineTo((offset + series.length - 1) * step, top + plotHeight);
-                    ctx.lineTo(offset * step, top + plotHeight);
-                    ctx.closePath();
-                    ctx.fillStyle = Qt.rgba(color.r, color.g, color.b, 0.14);
-                    ctx.fill();
+                    if (fill && last > first) {
+                        ctx.lineTo(xOf(last), top + plotHeight);
+                        ctx.lineTo(xOf(first), top + plotHeight);
+                        ctx.closePath();
+                        ctx.fillStyle = Qt.rgba(color.r, color.g, color.b, 0.14);
+                        ctx.fill();
+                    }
                 }
             }
 
             drawSeries(graph.txSeries, graph.txColor, false);
             drawSeries(graph.rxSeries, graph.rxColor, true);
+
+            const elapsed = Date.now() - startedAt;
+            graph.paintMs += elapsed;
+            graph.paintCount += 1;;
         }
     }
 }

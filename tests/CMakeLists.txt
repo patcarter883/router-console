@@ -250,6 +250,30 @@ target_link_libraries(m15-mdi-geometry PRIVATE router-console-core)
 add_test(NAME m15-mdi-geometry COMMAND m15-mdi-geometry)
 set_tests_properties(m15-mdi-geometry PROPERTIES TIMEOUT 30)
 
+# --- Milestone 16: persistent traffic graphs ----------------------------------
+# The history store: two-tier retention (1 Hz recent, 10 s coarse to 24 h),
+# per-window grid bucketing and the merge math between the tiers. No router.
+add_executable(m16-traffic-history m16_traffic_history.cpp)
+target_link_libraries(m16-traffic-history PRIVATE router-console-core)
+add_test(NAME m16-traffic-history COMMAND m16-traffic-history)
+set_tests_properties(m16-traffic-history PROPERTIES TIMEOUT 60)
+
+# The real thing: ssh traffic through the VM, no graph window open, and the four
+# range views must still hold the run's samples at 1 s / 1 s / 10 s / 5 min.
+add_executable(m16-traffic-history-live m16_traffic_history_live.cpp)
+target_link_libraries(m16-traffic-history-live PRIVATE router-console-core)
+add_test(NAME m16-traffic-history-live
+         COMMAND m16-traffic-history-live --host ${RC_TEST_HOST} --user root --password root
+                 --accept-new-cert --ssh-port ${RC_TEST_SSH_PORT} --interface lan
+                 --seconds 32 --min-rate 100000)
+set_tests_properties(m16-traffic-history-live PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 150)
+
+# The window wiring: four ranges offered, the selected one queried from the store,
+# and the graph drawing the store's grid with gaps left as gaps.
+add_test(NAME m16-graph-ui
+         COMMAND ${CMAKE_SOURCE_DIR}/tests/m16_graph_ui.sh ${CMAKE_SOURCE_DIR})
+set_tests_properties(m16-graph-ui PROPERTIES TIMEOUT 30)
+
 # The views must stay frame content rather than top-level windows, and the tree
 # must stay the launcher.
 add_test(NAME m15-mdi-structure
