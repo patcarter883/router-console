@@ -1,24 +1,80 @@
 #pragma once
 
+#include <QByteArray>
 #include <QObject>
+#include <QThread>
 
-// Owns the connection lifecycle and the ubus session; the protocol layer
-// (ubus JSON-RPC over HTTPS) attaches beneath this and is not part of the
-// skeleton.
+#include "protocol/UbusTypes.h"
+
+class UbusClient;
+
+// Owns the connection lifecycle and exposes it to QML as plain properties.
+// The ubus client lives in its own thread; every call into it is queued and
+// every result arrives here as a typed struct, so the UI thread never touches
+// sockets, TLS or JSON.
 class AppEngine : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
+
+    Q_PROPERTY(bool connected READ isConnected NOTIFY stateChanged)
+    Q_PROPERTY(bool busy READ isBusy NOTIFY stateChanged)
+    Q_PROPERTY(QString statusText READ statusText NOTIFY stateChanged)
+    Q_PROPERTY(QString errorText READ errorText NOTIFY stateChanged)
+    Q_PROPERTY(QString hostname READ hostname NOTIFY stateChanged)
+    Q_PROPERTY(QString model READ model NOTIFY stateChanged)
+    Q_PROPERTY(QString firmware READ firmware NOTIFY stateChanged)
+    Q_PROPERTY(QString kernel READ kernel NOTIFY stateChanged)
+    Q_PROPERTY(QString target READ target NOTIFY stateChanged)
+    Q_PROPERTY(bool trustPending READ trustPending NOTIFY stateChanged)
+    Q_PROPERTY(QString trustFingerprint READ trustFingerprint NOTIFY stateChanged)
 
 public:
     explicit AppEngine(QObject *parent = nullptr);
+    ~AppEngine() override;
 
-    bool connected() const { return m_connected; }
-    Q_INVOKABLE void connectTo(const QString &host, const QString &username, const QString &password);
+    bool isConnected() const { return m_state == State::Connected; }
+    bool isBusy() const { return m_state == State::Connecting; }
+    bool trustPending() const { return m_state == State::TrustPending; }
+    QString statusText() const;
+    QString errorText() const { return m_error; }
+    QString hostname() const { return m_board.hostname; }
+    QString model() const { return m_board.model; }
+    QString firmware() const { return m_board.firmwareLabel(); }
+    QString kernel() const { return m_board.kernel; }
+    QString target() const { return m_board.target; }
+    QString trustFingerprint() const { return QString::fromLatin1(m_pendingPin); }
+
+    Q_INVOKABLE void connectTo(const QString &host, const QString &port, const QString &username,
+                               const QString &password);
+    Q_INVOKABLE void trustCertificate();
+    Q_INVOKABLE void rejectCertificate();
+    Q_INVOKABLE void disconnectFromRouter();
 
 signals:
-    void connectedChanged();
+    void stateChanged();
 
 private:
-    bool m_connected = false;
+    enum class State { Idle, Connecting, TrustPending, Connected, Failed };
+
+    void startLogin();
+    void setState(State state, const QString &error = {});
+    QString settingsKey() const;
+
+    void onLoggedIn(const Ubus::Session &session);
+    void onLoginFailed(const Ubus::Error &error);
+    void onBoardReceived(const Ubus::BoardInfo &board);
+    void onBoardFailed(const Ubus::Error &error);
+    void onCertificateRequired(const QString &host, const QByteArray &fingerprint);
+    void onCertificateRejected(const QString &reason);
+
+    QThread m_thread;
+    UbusClient *m_client = nullptr;
+    State m_state = State::Idle;
+    Ubus::BoardInfo m_board;
+    QString m_host;
+    quint16 m_port = 443;
+    QString m_username;
+    QString m_password;
+    QByteArray m_pendingPin;
+    QString m_error;
 };
