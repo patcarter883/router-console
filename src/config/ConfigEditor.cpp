@@ -49,6 +49,8 @@ void ConfigEditor::reload()
 {
     if (!m_client)
         return;
+    m_loaded = false;
+    m_absent = false;
     setError({});
     setBusy(true, QStringLiteral("reading %1…").arg(m_spec.config));
     QMetaObject::invokeMethod(m_client, "uciGetConfig", Qt::QueuedConnection,
@@ -115,6 +117,14 @@ void ConfigEditor::revert()
     if (!m_client)
         return;
     setError({});
+    if (m_absent) {
+        // No package on this router: nothing is staged on either side.
+        m_staged.clear();
+        rebuildPending();
+        emit pendingChanged();
+        emit reverted();
+        return;
+    }
     setBusy(true, QStringLiteral("reverting…"));
     QMetaObject::invokeMethod(m_client, "uciRevert", Qt::QueuedConnection,
                               Q_ARG(QString, m_spec.config));
@@ -126,6 +136,7 @@ void ConfigEditor::onConfigReceived(const Ubus::UciConfig &config)
         return;
 
     m_config = config;
+    m_loaded = true;
     m_sections.setSections(config.sections, m_spec.summaryOptions);
 
     if (m_config.section(m_section) == nullptr) {
@@ -135,12 +146,26 @@ void ConfigEditor::onConfigReceived(const Ubus::UciConfig &config)
 
     rebuildFields();
     rebuildPending();
-    setBusy(false, QStringLiteral("%1 section(s) in %2").arg(config.sections.size()).arg(m_spec.config));
+    setBusy(false, m_absent
+                       ? QStringLiteral("no /etc/config/%1 on this router").arg(m_spec.config)
+                       : QStringLiteral("%1 section(s) in %2")
+                             .arg(config.sections.size())
+                             .arg(m_spec.config));
     emit pendingChanged();
 }
 
 void ConfigEditor::onConfigFailed(const Ubus::Error &error)
 {
+    // UCI answers "not found" for a package this router does not have (no
+    // wireless stack, so no /etc/config/wireless): an empty domain, not a
+    // failed read. Anything else is a failure.
+    if (error.status == Ubus::Status::NotFound) {
+        m_absent = true;
+        Ubus::UciConfig missing;
+        missing.name = m_spec.config;
+        onConfigReceived(missing);
+        return;
+    }
     setBusy(false, QStringLiteral("read failed"));
     setError(error.message.isEmpty() ? QStringLiteral("uci get failed (status %1)")
                                            .arg(int(error.status))

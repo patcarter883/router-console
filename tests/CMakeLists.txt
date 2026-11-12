@@ -53,6 +53,23 @@ add_test(NAME uci-sqm-staged-reboot
 set_tests_properties(uci-sqm-staged-reboot PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 420
                      LABELS vm-boot)
 
+# Star check for requirement 3 (config across system, network, wireless,
+# firewall, SQM, DHCP): one test per core domain. Each reads the package, proves
+# the registry's fields name options the router really stores, stages one
+# reversible change and checks the staged-changes list. network and firewall
+# stop at stage + revert (an apply would rewrite the VM's live addressing and
+# filtering); dhcp applies and restores its baseline; wireless is empty on this
+# VM (no wireless stack) and must load as an empty domain.
+add_executable(uci-domain-staged uci_domain_staged.cpp)
+target_link_libraries(uci-domain-staged PRIVATE router-console-core)
+
+foreach(domain network wireless firewall dhcp)
+    add_test(NAME uci-${domain}-staged
+             COMMAND uci-domain-staged --host 127.0.0.1:10443 --user root --password root
+                     --accept-new-cert --domain ${domain})
+    set_tests_properties(uci-${domain}-staged PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 120)
+endforeach()
+
 # --- Milestone 6: plugin interface ------------------------------------------
 # Manifest contract, no router needed: the three app plugins plus the hello stub
 # parse, declare the sources they bind to, and a broken manifest is rejected
