@@ -52,13 +52,23 @@ struct SectionSpec {
 };
 
 struct DomainSpec {
+    // UCI packages are one kind of editable surface; frr.conf is the second:
+    // same staged-diff editor, file write + daemon restart instead of
+    // uci set/apply/confirm.
+    enum class Kind { Uci, FrrConfig };
+
     QString id;          // stable key used by the tree and the editor
     QString title;       // tree label
-    QString config;      // UCI package
+    QString config;      // UCI package, or the file name for Kind::FrrConfig
     QString sectionType; // primary UCI section type
     QStringList summaryOptions; // primary group's subtitle options
     QList<FieldSpec> fields;    // primary group's fields
     QList<SectionSpec> sections; // empty: one sectionType; else every group
+    Kind kind = Kind::Uci;
+    QString filePath; // Kind::FrrConfig source file
+
+    // "/etc/config/<config>" or the FRR file path, shown in the editor header.
+    QString sourceLabel() const;
 
     // Section types the editor reads. Always non-empty for a valid domain.
     QStringList sectionTypes() const;

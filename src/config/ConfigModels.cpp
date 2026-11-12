@@ -99,6 +99,8 @@ QVariant ConfigSectionsModel::data(const QModelIndex &index, int role) const
         return row.type;
     case SummaryRole:
         return row.summary;
+    case DetailRole:
+        return row.detail;
     default:
         return {};
     }
@@ -106,14 +108,23 @@ QVariant ConfigSectionsModel::data(const QModelIndex &index, int role) const
 
 QHash<int, QByteArray> ConfigSectionsModel::roleNames() const
 {
-    return {{NameRole, "name"}, {TypeRole, "type"}, {SummaryRole, "summary"}};
+    return {{NameRole, "name"},
+            {TypeRole, "type"},
+            {SummaryRole, "summary"},
+            {DetailRole, "detail"}};
+}
+
+void ConfigSectionsModel::setRows(const QList<Row> &rows)
+{
+    beginResetModel();
+    m_rows = rows;
+    endResetModel();
 }
 
 void ConfigSectionsModel::setSections(const QList<Ubus::UciSection> &sections,
                                       const Config::DomainSpec &spec)
 {
-    beginResetModel();
-    m_rows.clear();
+    QList<Row> rows;
     for (const Ubus::UciSection &section : sections) {
         const QStringList summaryOptions = spec.summaryOptionsFor(section.type);
         QStringList parts;
@@ -122,9 +133,29 @@ void ConfigSectionsModel::setSections(const QList<Ubus::UciSection> &sections,
             if (!value.isEmpty())
                 parts.append(value);
         }
-        m_rows.append({section.name, section.type, parts.join(QStringLiteral(" · "))});
+        rows.append({section.name, section.type, parts.join(QStringLiteral(" · ")),
+                     QStringLiteral("%1 · %2").arg(section.type, section.name)});
     }
-    endResetModel();
+    setRows(rows);
+}
+
+void ConfigSectionsModel::setFrrBlocks(const QList<Routing::FrrBlock> &blocks)
+{
+    QList<Row> rows;
+    for (int index = 0; index < blocks.size(); ++index) {
+        const Routing::FrrBlock &block = blocks.at(index);
+        QStringList summary;
+        for (const Routing::FrrStatement &statement : block.statements) {
+            if (summary.size() >= 2)
+                break;
+            if (statement.duplicate)
+                continue;
+            summary.append(QStringLiteral("%1 %2").arg(statement.keyword, statement.value).trimmed());
+        }
+        rows.append({QString::number(index), block.type, summary.join(QStringLiteral(" · ")),
+                     block.header});
+    }
+    setRows(rows);
 }
 
 int ConfigSectionsModel::rowFor(const QString &name) const

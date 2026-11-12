@@ -5,6 +5,13 @@
 
 namespace Config {
 
+QString DomainSpec::sourceLabel() const
+{
+    if (kind == Kind::FrrConfig)
+        return filePath;
+    return QStringLiteral("/etc/config/%1").arg(config);
+}
+
 QStringList DomainSpec::sectionTypes() const
 {
     if (!sections.isEmpty()) {
@@ -292,13 +299,81 @@ DomainSpec dhcpDomain()
     return spec;
 }
 
+// frr.conf is a text grammar, not UCI: /etc/frr/frr.conf holds every daemon's
+// config in one file (measured on FRR 10.4.1, docs/frr-routing.md). The fields
+// here are the statements the editor offers even when the block does not carry
+// them yet; every other statement in a block is listed from the file itself.
+// `option` is the statement prefix, so the editor rewrites "<prefix> <value>".
+DomainSpec frrDomain()
+{
+    DomainSpec spec;
+    spec.id = QStringLiteral("frr");
+    spec.title = QStringLiteral("Routing (FRR)");
+    spec.config = QStringLiteral("frr");
+    spec.kind = DomainSpec::Kind::FrrConfig;
+    spec.filePath = QStringLiteral("/etc/frr/frr.conf");
+    spec.sectionType = QStringLiteral("router ospf");
+
+    SectionSpec global;
+    global.type = QStringLiteral("global");
+    global.summaryOptions = {QStringLiteral("hostname")};
+    global.fields = {
+        {QStringLiteral("hostname"), QStringLiteral("Hostname"), FieldKind::Text, {}, {}, false},
+        {QStringLiteral("log syslog"), QStringLiteral("Syslog level"), FieldKind::Choice, {},
+         {QStringLiteral("informational"), QStringLiteral("notifications"), QStringLiteral("debugging")},
+         false},
+    };
+
+    SectionSpec ospf;
+    ospf.type = QStringLiteral("router ospf");
+    ospf.summaryOptions = {QStringLiteral("ospf router-id")};
+    ospf.fields = {
+        {QStringLiteral("ospf router-id"), QStringLiteral("Router ID"), FieldKind::Text, {}, {},
+         false},
+        {QStringLiteral("ospf log-adjacency-changes"),
+         QStringLiteral("Log adjacency changes"), FieldKind::Text, {}, {}, false},
+    };
+
+    SectionSpec bgp;
+    bgp.type = QStringLiteral("router bgp");
+    bgp.summaryOptions = {QStringLiteral("bgp router-id")};
+    bgp.fields = {
+        {QStringLiteral("bgp router-id"), QStringLiteral("Router ID"), FieldKind::Text, {}, {},
+         false},
+        {QStringLiteral("network"), QStringLiteral("Advertised network"), FieldKind::Text,
+         QStringLiteral("/len"), {}, false},
+    };
+
+    SectionSpec interface;
+    interface.type = QStringLiteral("interface");
+    interface.summaryOptions = {QStringLiteral("ip ospf area")};
+    interface.fields = {
+        {QStringLiteral("ip ospf area"), QStringLiteral("OSPF area"), FieldKind::Text, {}, {},
+         false},
+        {QStringLiteral("ip ospf cost"), QStringLiteral("OSPF cost"), FieldKind::Integer, {}, {},
+         false},
+        {QStringLiteral("ip ospf priority"), QStringLiteral("OSPF priority"), FieldKind::Integer,
+         {}, {}, false},
+        {QStringLiteral("ip ospf network"), QStringLiteral("Network type"), FieldKind::Choice, {},
+         {QStringLiteral("point-to-point"), QStringLiteral("broadcast"),
+          QStringLiteral("non-broadcast"), QStringLiteral("point-to-multipoint")},
+         false},
+    };
+
+    SectionSpec line;
+    line.type = QStringLiteral("line");
+
+    spec.sections = {global, ospf, bgp, interface, line};
+    return spec;
+}
+
 } // namespace
 
 const QList<DomainSpec> &domains()
 {
     static const QList<DomainSpec> registry{sqmDomain(),  systemDomain(), networkDomain(),
                                             wirelessDomain(), firewallDomain(),
-                                            dhcpDomain()};
+                                            dhcpDomain(), frrDomain()};
     return registry;
 }
 

@@ -2,6 +2,7 @@
 
 #include <QCommandLineOption>
 #include <QCommandLineParser>
+#include <QtGlobal>
 #include <QObject>
 #include <QString>
 
@@ -12,9 +13,11 @@
 namespace vmfixture {
 
 struct ConnectOptions {
-    QString host = QStringLiteral("127.0.0.1:10443");
-    QString user = QStringLiteral("root");
-    QString password = QStringLiteral("root");
+    // A lab VM can sit on different forwards (a private worktree's copy); the
+    // environment override keeps ctest pointed at the right instance.
+    QString host = qEnvironmentVariable("RC_VM_HOST", QStringLiteral("127.0.0.1:10443"));
+    QString user = qEnvironmentVariable("RC_VM_USER", QStringLiteral("root"));
+    QString password = qEnvironmentVariable("RC_VM_PASS", QStringLiteral("root"));
     bool acceptNewCert = false;
     int timeoutMs = 60000;
 
