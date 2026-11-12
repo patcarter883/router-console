@@ -15,6 +15,9 @@ namespace Aim {
 namespace {
 
 constexpr double kEarthRadiusKm = 6371.0;
+// Spelled out rather than M_PI: MSVC's <cmath> only defines that with
+// _USE_MATH_DEFINES, and the client builds on Windows too.
+constexpr double kPi = 3.14159265358979323846;
 
 // rpcd hands the metrics over as strings ("" when the modem has no reading,
 // "unknown" from some paths), the tower extract as numbers. One reader for both.
@@ -53,7 +56,7 @@ QVariant numberOrEmpty(bool present, double value)
 
 double distanceKm(double lat1, double lon1, double lat2, double lon2)
 {
-    const double rad = M_PI / 180.0;
+    const double rad = kPi / 180.0;
     const double dLat = (lat2 - lat1) * rad;
     const double dLon = (lon2 - lon1) * rad;
     const double a = qPow(qSin(dLat / 2), 2)
@@ -63,7 +66,7 @@ double distanceKm(double lat1, double lon1, double lat2, double lon2)
 
 double initialBearingDeg(double lat1, double lon1, double lat2, double lon2)
 {
-    const double rad = M_PI / 180.0;
+    const double rad = kPi / 180.0;
     const double y = qSin((lon2 - lon1) * rad) * qCos(lat2 * rad);
     const double x = qCos(lat1 * rad) * qSin(lat2 * rad)
                      - qSin(lat1 * rad) * qCos(lat2 * rad) * qCos((lon2 - lon1) * rad);
