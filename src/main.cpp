@@ -8,6 +8,7 @@
 #include <QQuickWindow>
 
 #include "AppEngine.h"
+#include "models/AimModel.h"
 #include "ui/MdiGeometry.h"
 #include "ui/MdiRaiseFilter.h"
 
@@ -67,6 +68,7 @@ int main(int argc, char *argv[])
         });
     }
 
+    qmlRegisterType<Aim::Model>("RouterConsole", 1, 0, "AimModel");
     qmlRegisterSingletonInstance("RouterConsole", 1, 0, "AppEngine", engine);
     auto *geometry = new MdiGeometryStore(&app);
     qmlRegisterSingletonInstance("RouterConsole", 1, 0, "MdiGeometry", geometry);

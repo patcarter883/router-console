@@ -7,6 +7,7 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS Quick QuickControls2 Network)
 
 add_library(router-console-core STATIC
     AppEngine.cpp
+    models/AimModel.cpp
     models/InterfacesModel.cpp
     models/TrafficHistory.cpp
     config/ConfigEditor.cpp
