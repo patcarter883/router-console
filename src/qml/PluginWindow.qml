@@ -11,8 +11,13 @@ Rectangle {
     property string pluginId: ""
     property QtObject session: null
 
-    implicitWidth: 760
-    implicitHeight: 560
+    // A plugin view declares its own natural size; the frame reads it when the
+    // window opens, so the map and the aim rose are not forced into the list
+    // view's 760x560.
+    implicitWidth: viewLoader.item && viewLoader.item.implicitWidth > 0
+                   ? viewLoader.item.implicitWidth : 760
+    implicitHeight: viewLoader.item && viewLoader.item.implicitHeight > 0
+                    ? viewLoader.item.implicitHeight : 560
     property int minimumWidth: 560
     property int minimumHeight: 360
     property string windowTitle: session ? session.title : pluginId

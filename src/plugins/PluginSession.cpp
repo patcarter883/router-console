@@ -106,6 +106,9 @@ QVariantMap Session::allSamples() const
         entry.insert(QStringLiteral("ok"), it->ok);
         entry.insert(QStringLiteral("error"), it->error);
         entry.insert(QStringLiteral("at"), it->at.toString(Qt::ISODate));
+        // Monotonic per applied sample: a view that aggregates a series needs to
+        // tell two polls with identical figures apart.
+        entry.insert(QStringLiteral("revision"), m_revision);
         entry.insert(QStringLiteral("fields"), it->fields);
         all.insert(it.key(), entry);
     }
