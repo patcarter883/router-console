@@ -167,7 +167,49 @@ struct SysupgradeCheck {
     QString output;
 };
 
+// --- syslog ---
+
+// One line of `logread`, split into its syslog header. `raw` keeps the line as
+// the router printed it so the poller can tell repeats apart.
+struct LogEntry {
+    QDateTime time;
+    QString facility; // kern, authpriv, daemon, user, ...
+    QString level;    // info, notice, warn, err, ...
+    QString source;   // dropbear[5573], kernel, ...
+    QString message;
+    QString raw;
+
+    QString timeText() const;
+    QString levelText() const; // "authpriv.notice"
+};
+
+// --- DHCP leases ---
+
+// A row of the DHCP lease table: a live dnsmasq/odhcpd lease
+// (luci-rpc.getDHCPLeases) or a reservation from `config host` in /etc/config/dhcp.
+struct DhcpLease {
+    enum class Kind { DynamicV4, DynamicV6, Reservation };
+
+    Kind kind = Kind::DynamicV4;
+    QString hostname;
+    QString address;
+    QString mac;
+    QString duid;
+    QString interfaceName;
+    qint64 remainingSeconds = 0; // 0 = expired, < 0 = never expires
+    bool unlimited = false;
+
+    bool isDynamic() const { return kind != Kind::Reservation; }
+    QString kindText() const;
+    QString remainingText() const; // "12h 4m", "unlimited", "expired", "static"
+};
+
 } // namespace Ubus
+
+Q_DECLARE_METATYPE(Ubus::LogEntry)
+Q_DECLARE_METATYPE(QList<Ubus::LogEntry>)
+Q_DECLARE_METATYPE(Ubus::DhcpLease)
+Q_DECLARE_METATYPE(QList<Ubus::DhcpLease>)
 
 Q_DECLARE_METATYPE(Ubus::ExecResult)
 Q_DECLARE_METATYPE(Ubus::PingReply)

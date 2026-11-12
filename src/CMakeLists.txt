@@ -21,6 +21,10 @@ add_library(router-console-core STATIC
     protocol/UbusClient.cpp
     protocol/UciCodec.cpp
     tools/FilesTool.cpp
+    tools/ArchiveCodec.cpp
+    tools/BackupTool.cpp
+    tools/LeaseTool.cpp
+    tools/LogTool.cpp
     tools/PingTool.cpp
     tools/PortScanTool.cpp
     tools/SqmStatsTool.cpp
@@ -45,8 +49,11 @@ qt_add_qml_module(router-console
     VERSION 1.0
     QML_FILES
         qml/ConfigWindow.qml
+        qml/BackupWindow.qml
         qml/FilesWindow.qml
         qml/InterfaceWindow.qml
+        qml/LeasesWindow.qml
+        qml/LogWindow.qml
         qml/Main.qml
         qml/Connect.qml
         qml/PluginWindow.qml

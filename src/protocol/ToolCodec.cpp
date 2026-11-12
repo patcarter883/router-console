@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonValue>
+#include <QLocale>
 #include <QRegularExpression>
 
 #include <algorithm>
@@ -35,6 +36,54 @@ QString ConntrackFlow::tupleKey() const
         .arg(srcPort)
         .arg(dstAddress)
         .arg(dstPort);
+}
+
+QString LogEntry::timeText() const
+{
+    if (!time.isValid())
+        return QStringLiteral("-");
+    return time.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+}
+
+QString LogEntry::levelText() const
+{
+    if (facility.isEmpty())
+        return level;
+    if (level.isEmpty())
+        return facility;
+    return facility + QLatin1Char('.') + level;
+}
+
+QString DhcpLease::kindText() const
+{
+    switch (kind) {
+    case Kind::DynamicV4: return QStringLiteral("dynamic");
+    case Kind::DynamicV6: return QStringLiteral("dynamic v6");
+    case Kind::Reservation: return QStringLiteral("reservation");
+    }
+    return QStringLiteral("?");
+}
+
+QString DhcpLease::remainingText() const
+{
+    if (!isDynamic())
+        return QStringLiteral("static");
+    if (unlimited || remainingSeconds < 0)
+        return QStringLiteral("unlimited");
+    if (remainingSeconds == 0)
+        return QStringLiteral("expired");
+
+    qint64 seconds = remainingSeconds;
+    const qint64 days = seconds / 86400;
+    seconds %= 86400;
+    const qint64 hours = seconds / 3600;
+    seconds %= 3600;
+    const qint64 minutes = seconds / 60;
+    if (days > 0)
+        return QStringLiteral("%1d %2h").arg(days).arg(hours);
+    if (hours > 0)
+        return QStringLiteral("%1h %2m").arg(hours).arg(minutes);
+    return QStringLiteral("%1m %2s").arg(minutes).arg(seconds % 60);
 }
 
 } // namespace Ubus
@@ -481,6 +530,138 @@ SysupgradeCheck parseSysupgradeCheck(const QJsonObject &result)
     check.output = (stdoutText + stderrText).trimmed();
     check.accepted = check.code == 0;
     return check;
+}
+
+QJsonObject logReadArgs(int lines)
+{
+    return execArgs(QStringLiteral("/sbin/logread"),
+                    {QStringLiteral("-l"), QString::number(qBound(1, lines, 5000))});
+}
+
+QList<LogEntry> parseLogEntries(const QString &stdoutText)
+{
+    // logread prints ctime-style headers ("Thu Nov 12 14:43:32 2026"), then the
+    // syslog "<facility>.<level>" token; kernel lines carry it too. Anything that
+    // does not match that shape is kept whole as the message.
+    static const QRegularExpression headerPattern(
+        QStringLiteral("^([a-z][a-z0-9_-]*)\\.(emerg|alert|crit|err|warn|notice|info|debug)$"));
+    static const QString timeFormat = QStringLiteral("ddd MMM d HH:mm:ss yyyy");
+
+    QList<LogEntry> entries;
+    const QStringList lines = stdoutText.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    entries.reserve(lines.size());
+
+    for (const QString &line : lines) {
+        if (line.trimmed().isEmpty())
+            continue;
+
+        LogEntry entry;
+        entry.raw = line;
+        QString rest = line;
+        if (line.size() > 24) {
+            const QDateTime time = QLocale::c().toDateTime(line.left(24), timeFormat);
+            if (time.isValid()) {
+                entry.time = time;
+                rest = line.mid(25);
+            }
+        }
+
+        const qsizetype space = rest.indexOf(QLatin1Char(' '));
+        const QString first = space < 0 ? rest : rest.left(space);
+        const QRegularExpressionMatch match = headerPattern.match(first);
+        if (match.hasMatch()) {
+            entry.facility = match.captured(1);
+            entry.level = match.captured(2);
+            rest = space < 0 ? QString() : rest.mid(space + 1);
+            const qsizetype colon = rest.indexOf(QStringLiteral(": "));
+            if (colon > 0) {
+                entry.source = rest.left(colon).trimmed();
+                rest = rest.mid(colon + 2);
+            }
+        }
+        entry.message = rest.trimmed();
+        entries.append(entry);
+    }
+    return entries;
+}
+
+QList<DhcpLease> parseDhcpLeases(const QJsonObject &result)
+{
+    auto leaseFrom = [](const QJsonObject &object, DhcpLease::Kind kind) {
+        DhcpLease lease;
+        lease.kind = kind;
+        lease.hostname = object.value(QStringLiteral("hostname")).toString();
+        lease.mac = object.value(QStringLiteral("macaddr")).toString();
+        lease.duid = object.value(QStringLiteral("duid")).toString();
+        lease.interfaceName = object.value(QStringLiteral("interface")).toString();
+
+        if (kind == DhcpLease::Kind::DynamicV6) {
+            QStringList addresses;
+            const QJsonArray listed = object.value(QStringLiteral("ip6addrs")).toArray();
+            for (const QJsonValue &value : listed)
+                addresses.append(value.toString());
+            if (addresses.isEmpty())
+                addresses.append(object.value(QStringLiteral("ip6addr")).toString());
+            lease.address = addresses.join(QStringLiteral(", "));
+        } else {
+            lease.address = object.value(QStringLiteral("ipaddr")).toString();
+        }
+
+        // LuCI sends false for "never expires" and the remaining seconds otherwise.
+        const QJsonValue expires = object.value(QStringLiteral("expires"));
+        if (expires.isBool() && !expires.toBool())
+            lease.unlimited = true;
+        else if (expires.isDouble())
+            lease.remainingSeconds = static_cast<qint64>(expires.toDouble());
+        return lease;
+    };
+
+    QList<DhcpLease> leases;
+    const QJsonArray v4 = result.value(QStringLiteral("dhcp_leases")).toArray();
+    for (const QJsonValue &value : v4)
+        leases.append(leaseFrom(value.toObject(), DhcpLease::Kind::DynamicV4));
+    const QJsonArray v6 = result.value(QStringLiteral("dhcp6_leases")).toArray();
+    for (const QJsonValue &value : v6)
+        leases.append(leaseFrom(value.toObject(), DhcpLease::Kind::DynamicV6));
+    return leases;
+}
+
+QList<DhcpLease> parseLeaseHosts(const QJsonObject &result)
+{
+    QList<DhcpLease> leases;
+    const QJsonObject values = result.value(QStringLiteral("values")).toObject();
+    for (auto it = values.begin(); it != values.end(); ++it) {
+        const QJsonObject section = it.value().toObject();
+        DhcpLease lease;
+        lease.kind = DhcpLease::Kind::Reservation;
+        lease.hostname = section.value(QStringLiteral("name")).toString();
+        lease.address = section.value(QStringLiteral("ip")).toString();
+        const QJsonValue mac = section.value(QStringLiteral("mac"));
+        if (mac.isArray())
+            lease.mac = mac.toArray().at(0).toString();
+        else
+            lease.mac = mac.toString();
+        if (lease.hostname.isEmpty())
+            lease.hostname = it.key();
+        leases.append(lease);
+    }
+    std::sort(leases.begin(), leases.end(), [](const DhcpLease &a, const DhcpLease &b) {
+        return a.address < b.address;
+    });
+    return leases;
+}
+
+QStringList parseConfigNames(const QJsonObject &result)
+{
+    QStringList names;
+    const QJsonArray configs = result.value(QStringLiteral("configs")).toArray();
+    for (const QJsonValue &value : configs) {
+        const QString name = value.toString();
+        if (!name.isEmpty())
+            names.append(name);
+    }
+    names.sort();
+    return names;
 }
 
 } // namespace Ubus::ToolCodec

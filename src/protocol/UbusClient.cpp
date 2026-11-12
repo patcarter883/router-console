@@ -657,6 +657,97 @@ void UbusClient::packageInstall(const QStringList &packages)
          });
 }
 
+// --- daily-driver tier -------------------------------------------------------
+
+void UbusClient::fetchLog(int lines)
+{
+    // `logread -f` follows the socket and never returns, which rpcd's exec
+    // cannot deliver. A bounded `-l N` window polled by the view is the working
+    // surface: the reply is one stdout string of complete lines.
+    call(QStringLiteral("file"), QStringLiteral("exec"), ToolCodec::logReadArgs(lines),
+         [this](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit logFailed(error);
+                 return;
+             }
+             emit logReceived(
+                 ToolCodec::parseLogEntries(result.value(QStringLiteral("stdout")).toString()));
+         });
+}
+
+void UbusClient::fetchDhcpLeases()
+{
+    // Live leases come from the luci-rpc surface (it reads dnsmasq's leasefile
+    // and odhcpd's); reservations live only in uci, so both are merged here and
+    // the view sees one table.
+    call(QStringLiteral("luci-rpc"), QStringLiteral("getDHCPLeases"), {},
+         [this](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit leasesFailed(error);
+                 return;
+             }
+             const QList<Ubus::DhcpLease> dynamic = ToolCodec::parseDhcpLeases(result);
+             call(QStringLiteral("uci"), QStringLiteral("get"),
+                  UciCodec::getTypeArgs(QStringLiteral("dhcp"), QStringLiteral("host")),
+                  [this, dynamic](const QJsonObject &hosts, const Ubus::Error &hostError) {
+                      // A router with no reservations at all answers NOT_FOUND;
+                      // that is an empty table, not a failed read.
+                      QList<Ubus::DhcpLease> leases = dynamic;
+                      if (hostError.isOk())
+                          leases.append(ToolCodec::parseLeaseHosts(hosts));
+                      emit leasesReceived(leases);
+                  });
+         });
+}
+
+void UbusClient::fetchConfigNames()
+{
+    call(QStringLiteral("uci"), QStringLiteral("configs"), {},
+         [this](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit configNamesFailed(error);
+                 return;
+             }
+             emit configNamesReceived(ToolCodec::parseConfigNames(result));
+         });
+}
+
+void UbusClient::fileReadTagged(const QString &tag, const QString &path)
+{
+    call(QStringLiteral("file"), QStringLiteral("read"), ToolCodec::fileReadArgs(path),
+         [this, tag, path](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit fileReadTaggedFailed(tag, error);
+                 return;
+             }
+             emit fileReadTaggedFinished(tag, path, ToolCodec::parseFileData(result, true));
+         });
+}
+
+void UbusClient::fileWriteTagged(const QString &tag, const QString &path, const QByteArray &data)
+{
+    call(QStringLiteral("file"), QStringLiteral("write"), ToolCodec::fileWriteArgs(path, data),
+         [this, tag, path, bytes = int(data.size())](const QJsonObject &, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit fileWriteTaggedFailed(tag, error);
+                 return;
+             }
+             emit fileWriteTaggedFinished(tag, path, bytes);
+         });
+}
+
+void UbusClient::execTagged(const QString &tag, const QString &command, const QStringList &params)
+{
+    call(QStringLiteral("file"), QStringLiteral("exec"), ToolCodec::execArgs(command, params),
+         [this, tag, command](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit execTaggedFailed(tag, error);
+                 return;
+             }
+             emit execTaggedFinished(tag, ToolCodec::parseExec(command, result));
+         });
+}
+
 void UbusClient::closeSession()
 {
     m_session = {};

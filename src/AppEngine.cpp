@@ -14,6 +14,9 @@
 #include "protocol/MdnsDiscovery.h"
 #include "protocol/UbusClient.h"
 #include "tools/FilesTool.h"
+#include "tools/BackupTool.h"
+#include "tools/LeaseTool.h"
+#include "tools/LogTool.h"
 #include "tools/PingTool.h"
 #include "tools/PortScanTool.h"
 #include "tools/SqmStatsTool.h"
@@ -41,6 +44,9 @@ AppEngine::AppEngine(QObject *parent) : QObject(parent)
     m_files = new FilesTool(m_client, this);
     m_sqm = new SqmStatsTool(m_client, this);
     m_torch = new TorchModel(m_client, this);
+    m_log = new LogTool(m_client, this);
+    m_leases = new LeaseTool(m_client, this);
+    m_backup = new BackupTool(m_client, this);
     m_client->moveToThread(&m_thread);
     connect(&m_thread, &QThread::finished, m_client, &QObject::deleteLater);
 
@@ -123,6 +129,21 @@ QObject *AppEngine::filesTool()
 QObject *AppEngine::sqmStatsTool()
 {
     return m_sqm;
+}
+
+QObject *AppEngine::logTool()
+{
+    return m_log;
+}
+
+QObject *AppEngine::leaseTool()
+{
+    return m_leases;
+}
+
+QObject *AppEngine::backupTool()
+{
+    return m_backup;
 }
 
 QAbstractItemModel *AppEngine::torchModel()
@@ -262,6 +283,9 @@ void AppEngine::resetTools()
     m_portScan->reset();
     m_files->reset();
     m_sqm->reset();
+    m_log->reset();
+    m_leases->reset();
+    m_backup->reset();
 }
 
 QObject *AppEngine::configEditor(const QString &domainId)

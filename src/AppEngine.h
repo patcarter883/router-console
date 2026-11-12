@@ -27,6 +27,9 @@ class PortScanTool;
 class FilesTool;
 class SqmStatsTool;
 class TorchModel;
+class LogTool;
+class LeaseTool;
+class BackupTool;
 
 // Owns the connection lifecycle and exposes it to QML as plain properties.
 // The ubus client lives in its own thread; every call into it is queued and
@@ -58,6 +61,9 @@ class AppEngine : public QObject
     Q_PROPERTY(QObject *portScanTool READ portScanTool CONSTANT)
     Q_PROPERTY(QObject *filesTool READ filesTool CONSTANT)
     Q_PROPERTY(QObject *sqmStatsTool READ sqmStatsTool CONSTANT)
+    Q_PROPERTY(QObject *logTool READ logTool CONSTANT)
+    Q_PROPERTY(QObject *leaseTool READ leaseTool CONSTANT)
+    Q_PROPERTY(QObject *backupTool READ backupTool CONSTANT)
     Q_PROPERTY(QAbstractItemModel *torchModel READ torchModel CONSTANT)
 
 public:
@@ -87,6 +93,9 @@ public:
     QObject *portScanTool();
     QObject *filesTool();
     QObject *sqmStatsTool();
+    QObject *logTool();
+    QObject *leaseTool();
+    QObject *backupTool();
     QAbstractItemModel *torchModel();
 
     Q_INVOKABLE void connectTo(const QString &host, const QString &port, const QString &username,
@@ -133,6 +142,9 @@ private:
     FilesTool *m_files = nullptr;
     SqmStatsTool *m_sqm = nullptr;
     TorchModel *m_torch = nullptr;
+    LogTool *m_log = nullptr;
+    LeaseTool *m_leases = nullptr;
+    BackupTool *m_backup = nullptr;
     QThread m_discoveryThread;
     MdnsDiscovery *m_discovery = nullptr;
     DiscoveredHostsModel m_discovered;
