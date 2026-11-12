@@ -45,14 +45,6 @@ jobs:
         with:
           arch: x64
 
-      - name: Toolchain probe
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Get-ChildItem 'C:\Program Files\Microsoft Visual Studio' -ErrorAction SilentlyContinue |
-            Select-Object -ExpandProperty Name
-          cl 2>&1 | Select-Object -First 1
-
       - name: Linux build dependencies
         if: runner.os == 'Linux'
         run: |
