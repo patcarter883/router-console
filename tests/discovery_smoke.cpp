@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 the router-console authors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -5,6 +8,7 @@
 #include <QTimer>
 
 #include "AppEngine.h"
+#include "vm_probe.h"
 
 // Discovery check: starts the same AppEngine the connect window uses and
 // asserts the dev VM shows up in the discovered-router list within the budget.
@@ -21,10 +25,15 @@ int main(int argc, char *argv[])
     const QCommandLineOption addressOption("address", "expected IPv4 address", "addr",
                                            "192.168.78.1");
     const QCommandLineOption timeoutOption("timeout", "budget in ms", "ms", "10000");
-    parser.addOptions({hostnameOption, addressOption, timeoutOption});
+    const QCommandLineOption vmOption("vm", "dev VM rpcd forward used to decide the skip",
+                                      "host:port", "127.0.0.1:10443");
+    parser.addOptions({hostnameOption, addressOption, timeoutOption, vmOption});
     parser.process(app);
 
     QTextStream out(stdout);
+    if (const int skip = skipWithoutDevVm(out, parser.value(vmOption)))
+        return skip;
+
     QElapsedTimer elapsed;
     elapsed.start();
 

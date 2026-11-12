@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 the router-console authors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import QtQuick
 
 // Rolling RX/TX line graph for one interface. Both series are byte-per-second

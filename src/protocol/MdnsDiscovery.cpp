@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 the router-console authors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #include "MdnsDiscovery.h"
 
 #include <QNetworkDatagram>

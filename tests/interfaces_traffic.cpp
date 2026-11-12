@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 the router-console authors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -7,6 +10,7 @@
 
 #include "AppEngine.h"
 #include "models/InterfacesModel.h"
+#include "vm_probe.h"
 
 // Live-graph check against the dev VM: connect, push traffic through an
 // interface, then assert the per-interface byte counters the model samples at
@@ -39,6 +43,8 @@ int main(int argc, char *argv[])
     parser.process(app);
 
     QTextStream out(stdout);
+    if (const int skip = skipWithoutDevVm(out, parser.value(hostOption)))
+        return skip;
     const int wantedSamples = qMax(2, parser.value(samplesOption).toInt());
     const QString interfaceName = parser.value(interfaceOption);
 
