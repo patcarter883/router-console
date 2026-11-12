@@ -40,6 +40,17 @@ public slots:
     void fetchDeviceStatus();
     void closeSession();
 
+    // UCI staged editing. Reads are per section type (rpcd has no get_all);
+    // writes stage, then uciApplyStaged commits set* -> apply -> confirm.
+    void uciGetConfig(const QString &config, const QString &sectionType);
+    void uciGetOption(const QString &config, const QString &section, const QString &option);
+    void uciChanges(const QString &config);
+    void uciSet(const Ubus::UciSetRequest &request);
+    void uciApplyStaged(const QString &config, const QList<Ubus::UciSetRequest> &requests,
+                        int rollbackTimeoutSeconds);
+    void uciRevert(const QString &config);
+    void systemReboot();
+
 signals:
     void loggedIn(const Ubus::Session &session);
     void loginFailed(const Ubus::Error &error);
@@ -51,6 +62,22 @@ signals:
     void deviceStatusFailed(const Ubus::Error &error);
     void certificateRequired(const QString &host, const QByteArray &sha256Hex);
     void certificateRejected(const QString &reason);
+
+    void uciConfigReceived(const Ubus::UciConfig &config);
+    void uciConfigFailed(const Ubus::Error &error);
+    void uciOptionReceived(const QString &config, const QString &section, const QString &option,
+                           const QString &value);
+    void uciOptionFailed(const Ubus::Error &error);
+    void uciChangesReceived(const Ubus::UciChangeSet &changes);
+    void uciChangesFailed(const Ubus::Error &error);
+    void uciStaged(const Ubus::UciSetRequest &request);
+    void uciStageFailed(const Ubus::Error &error);
+    void uciApplied(int changeCount);
+    void uciApplyFailed(const Ubus::Error &error);
+    void uciReverted(const QString &config);
+    void uciRevertFailed(const Ubus::Error &error);
+    void rebootRequested();
+    void rebootFailed(const Ubus::Error &error);
 
 private:
     using ResultHandler = std::function<void(const QJsonObject &result, const Ubus::Error &error)>;

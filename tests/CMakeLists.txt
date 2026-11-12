@@ -34,3 +34,21 @@ add_test(NAME discovery-after-boot
          COMMAND ${CMAKE_SOURCE_DIR}/tests/after-boot-discovery.sh $<TARGET_FILE:discovery-smoke>)
 set_tests_properties(discovery-after-boot PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 300
                      LABELS vm-boot)
+
+# Star check for the config half: staged SQM edit -> changes list -> apply ->
+# value persisted -> stage + revert leaves the config unchanged.
+add_executable(uci-sqm-staged uci_sqm_staged.cpp)
+target_link_libraries(uci-sqm-staged PRIVATE router-console-core)
+
+add_test(NAME uci-sqm-staged
+         COMMAND uci-sqm-staged --host 127.0.0.1:10443 --user root --password root
+                 --accept-new-cert --domain sqm --section eth1 --option download)
+set_tests_properties(uci-sqm-staged PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 120)
+
+# Same flow with `uci apply` followed by `system reboot`: the committed value has
+# to survive a real VM boot. Labelled vm-boot because it reboots the VM.
+add_test(NAME uci-sqm-staged-reboot
+         COMMAND uci-sqm-staged --host 127.0.0.1:10443 --user root --password root
+                 --accept-new-cert --domain sqm --section eth1 --option download --reboot)
+set_tests_properties(uci-sqm-staged-reboot PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 420
+                     LABELS vm-boot)

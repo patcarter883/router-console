@@ -163,6 +163,14 @@ With the VM up (`scripts/dev-vm.sh`):
     ctest --test-dir build --output-on-failure
     # connect-smoke: login + system.board
     # interfaces-traffic: per-interface counters grow over 6 one-second samples
+    # uci-sqm-staged: staged SQM edit, changes list, apply, revert
+
+The config editor needs the client's rpcd ACL group on the VM, because the stock
+LuCI groups do not grant `uci revert` (measured; see
+`docs/ubus-rpcd-read-surface.md`). Install it once per VM, idempotent:
+
+    scripts/vm-rpcd-acl.sh
+    # rpcd ACL group router-console installed: uci get + revert allowed
 
 `build/tests/connect-smoke` prints the typed board fields and exits 0 only when
 the session and `system.board` both succeed:
@@ -201,6 +209,39 @@ the boot-time announcements pass, then a clean client start:
     == letting the boot-time announcements pass (15s)
     == clean client start: discovery must find the router within 10 s
     DISCOVERED openwrt-dev 192.168.78.1:443 after 3437 ms
+
+## Config editor checks
+
+    ctest --test-dir build -R uci-sqm-staged -LE vm-boot --output-on-failure
+    ctest --test-dir build -R uci-sqm-staged-reboot -L vm-boot --output-on-failure
+
+`build/tests/uci-sqm-staged` drives the same `AppEngine` + `ConfigEditor` the
+window uses and asserts every step against an independent ubus session:
+
+    [2] read sqm
+        eth1.download = 85000  (sections: 1)
+    [3] stage eth1.download = 87000
+        Pending changes (1)
+          •  eth1.download  85000 → 87000
+    [4] apply
+        applied; pending list now (0), committed eth1.download = 87000
+        router: eth1.download = 87000, uci changes empty
+    [5] reboot the VM (vm-boot)
+        reboot acknowledged, waiting for the VM to come back
+        reconnected to openwrt-dev after 23 s
+    [6] persisted after reboot: eth1.download = 87000  PASS
+    [7] stage eth1.download = 89000 then revert
+        pending: eth1.download  87000 → 89000
+        router session staged: set eth1.download=91000
+        uci revert discarded it: eth1.download = 87000, changes empty
+        after revert: pending (0), eth1.download = 87000, uci changes empty  PASS
+    [8] restored eth1.download = 85000 (lab baseline)
+    PASS staged sqm edit: 85000 -> 87000, persisted across reboot, revert clean
+
+The window itself is captured by `scripts/config-check.sh`, which opens the SQM
+editor, stages `download=91000` (nothing applied) and writes
+`docs/evidence/m4-config-tree.png` and
+`docs/evidence/m4-config-editor-pending.png`.
 
 
 ## Traffic generator for graph checks
