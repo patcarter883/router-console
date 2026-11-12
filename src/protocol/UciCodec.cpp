@@ -34,7 +34,20 @@ UciSection parseSection(const QJsonObject &values)
         } else if (key == QLatin1String(".index")) {
             section.index = it.value().toInt();
         } else if (!key.startsWith(QLatin1Char('.'))) {
-            section.options.insert(key, it.value().toVariant().toString());
+            // UCI list options come back as a JSON array (zone network,
+            // rule icmp_type); the editor shows a UCI list as one
+            // space-separated value, which is also what `uci get` prints.
+            if (it.value().isArray()) {
+                QStringList items;
+                for (const QJsonValue &item : it.value().toArray()) {
+                    const QString text = item.toVariant().toString();
+                    if (!text.isEmpty())
+                        items.append(text);
+                }
+                section.options.insert(key, items.join(QLatin1Char(' ')));
+            } else {
+                section.options.insert(key, it.value().toVariant().toString());
+            }
         }
     }
     return section;

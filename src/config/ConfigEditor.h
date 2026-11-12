@@ -77,12 +77,18 @@ private:
     void onApplyFailed(const Ubus::Error &error);
     void onReverted(const QString &config);
     void onRevertFailed(const Ubus::Error &error);
+    void onInterfacesReceived(const QList<Ubus::InterfaceInfo> &interfaces);
 
+    void readNextSectionType();
+    void applyRead(const Ubus::UciConfig &config);
     void rebuildFields();
     void rebuildPending();
     void setBusy(bool busy, const QString &status);
     void setError(const QString &error);
     const Ubus::UciSection *currentUciSection() const;
+    QString effectiveValue(const Ubus::UciSection &section, const QString &option) const;
+    QStringList zoneNames() const;
+    QString chainFor(const Ubus::UciSection &section) const;
 
     Config::DomainSpec m_spec;
     UbusClient *m_client = nullptr;
@@ -91,6 +97,13 @@ private:
     // section -> option -> staged value
     QMap<QString, QMap<QString, QString>> m_staged;
     QList<PendingChangesModel::Change> m_pending;
+
+    // Multi-section domains read one type per request and merge the answers.
+    QStringList m_pendingTypes;
+    Ubus::UciConfig m_mergeConfig;
+    bool m_collecting = false;
+    // Live names for InterfaceRef fields: interface names and their devices.
+    QStringList m_interfaceNames;
 
     ConfigSectionsModel m_sections;
     ConfigFieldsModel m_fields;

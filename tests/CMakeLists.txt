@@ -70,6 +70,17 @@ foreach(domain network wireless firewall dhcp)
     set_tests_properties(uci-${domain}-staged PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 120)
 endforeach()
 
+# Firewall rules + NAT: the domain's second half. Stages one redirect section
+# (uci add, never applied), one change on a real filter rule and one on the
+# redirect, asserts the pending list, then reverts and proves the baseline.
+add_executable(firewall-nat-staged firewall_nat_staged.cpp)
+target_link_libraries(firewall-nat-staged PRIVATE router-console-core)
+
+add_test(NAME firewall-nat-staged
+         COMMAND firewall-nat-staged --host 127.0.0.1:10443 --user root --password root
+                 --accept-new-cert)
+set_tests_properties(firewall-nat-staged PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 120)
+
 # --- Milestone 6: plugin interface ------------------------------------------
 # Manifest contract, no router needed: the three app plugins plus the hello stub
 # parse, declare the sources they bind to, and a broken manifest is rejected

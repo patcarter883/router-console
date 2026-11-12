@@ -89,6 +89,11 @@ public:
     QObject *sqmStatsTool();
     QAbstractItemModel *torchModel();
 
+    // The ubus client this engine owns. The integration tests use it when a
+    // staged UCI change must land in the same rpcd session the editor reads
+    // (rpcd keeps each session's staged delta separate).
+    UbusClient *client() const { return m_client; }
+
     Q_INVOKABLE void connectTo(const QString &host, const QString &port, const QString &username,
                                const QString &password);
     Q_INVOKABLE void trustCertificate();

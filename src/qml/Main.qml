@@ -39,6 +39,8 @@ ApplicationWindow {
         typeof startupInterfaceName === "undefined" ? "" : startupInterfaceName
     readonly property string startupConfig:
         typeof startupConfigDomain === "undefined" ? "" : startupConfigDomain
+    readonly property string startupConfigSectionName:
+        typeof startupConfigSection === "undefined" ? "" : startupConfigSection
     readonly property string startupTool:
         typeof startupToolId === "undefined" ? "" : startupToolId
     readonly property string startupStage:
@@ -46,14 +48,17 @@ ApplicationWindow {
     readonly property string startupPlugin:
         typeof startupPluginId === "undefined" ? "" : startupPluginId
 
-    function openConfig(domainId) {
+    function openConfig(domainId, initialSection) {
         for (let i = 0; i < configWindows.length; ++i) {
             if (configWindows[i].domainId === domainId) {
                 configWindows[i].requestActivate()
                 return configWindows[i]
             }
         }
-        const window = configWindowComponent.createObject(root, { domainId: domainId })
+        const window = configWindowComponent.createObject(root, {
+            domainId: domainId,
+            initialSection: initialSection || ""
+        })
         if (!window)
             return null
         configWindows.push(window)
@@ -590,7 +595,7 @@ ApplicationWindow {
             }
             if (root.startupConfig.length > 0 && !root.startupConfigOpened) {
                 root.startupConfigOpened = true
-                const window = root.openConfig(root.startupConfig)
+                const window = root.openConfig(root.startupConfig, root.startupConfigSectionName)
                 if (window && root.startupStage.length > 0)
                     window.stageAfterLoad = root.startupStage
             }

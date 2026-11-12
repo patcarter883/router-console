@@ -5,6 +5,41 @@
 
 namespace Config {
 
+QStringList DomainSpec::sectionTypes() const
+{
+    if (!sections.isEmpty()) {
+        QStringList types;
+        types.reserve(sections.size());
+        for (const SectionSpec &section : sections)
+            types.append(section.type);
+        return types;
+    }
+    return sectionType.isEmpty() ? QStringList() : QStringList{sectionType};
+}
+
+const SectionSpec *DomainSpec::sectionFor(const QString &type) const
+{
+    for (const SectionSpec &section : sections) {
+        if (section.type == type)
+            return &section;
+    }
+    return nullptr;
+}
+
+QStringList DomainSpec::summaryOptionsFor(const QString &type) const
+{
+    if (const SectionSpec *section = sectionFor(type))
+        return section->summaryOptions;
+    return summaryOptions;
+}
+
+QList<FieldSpec> DomainSpec::fieldsFor(const QString &type) const
+{
+    if (const SectionSpec *section = sectionFor(type))
+        return section->fields;
+    return fields;
+}
+
 namespace {
 
 // Option names, section type and the choice lists below are read from the dev
@@ -22,7 +57,8 @@ DomainSpec sqmDomain()
                            QStringLiteral("download"), QStringLiteral("upload")};
     spec.fields = {
         {QStringLiteral("enabled"), QStringLiteral("Enabled"), FieldKind::Boolean, {}, {}, false},
-        {QStringLiteral("interface"), QStringLiteral("Interface"), FieldKind::Text, {}, {}, false},
+        {QStringLiteral("interface"), QStringLiteral("Interface"), FieldKind::InterfaceRef, {}, {},
+         false},
         {QStringLiteral("download"), QStringLiteral("Download"), FieldKind::Integer,
          QStringLiteral("kbit/s"), {}, false},
         {QStringLiteral("upload"), QStringLiteral("Upload"), FieldKind::Integer,
@@ -79,7 +115,8 @@ DomainSpec networkDomain()
     spec.summaryOptions = {QStringLiteral("device"), QStringLiteral("proto"),
                            QStringLiteral("ipaddr")};
     spec.fields = {
-        {QStringLiteral("device"), QStringLiteral("Device"), FieldKind::Text, {}, {}, false},
+        {QStringLiteral("device"), QStringLiteral("Device"), FieldKind::InterfaceRef, {}, {},
+         false},
         {QStringLiteral("proto"), QStringLiteral("Protocol"), FieldKind::Choice, {},
          {QStringLiteral("static"), QStringLiteral("dhcp"), QStringLiteral("dhcpv6")}, false},
         {QStringLiteral("ipaddr"), QStringLiteral("IPv4 address"), FieldKind::Text,
@@ -121,8 +158,12 @@ DomainSpec wirelessDomain()
 }
 
 // /etc/config/firewall has two `config zone` sections (cfg02dc81 = lan,
-// cfg03dc81 = wan) carrying name, network, input, output, forward, masq and
-// mtu_fix; ACCEPT/REJECT/DROP are the policy values the file uses.
+// cfg03dc81 = wan), nine `config rule` sections and no redirect on this VM.
+// Zone/rule/redirect are three section types of one domain: the editor shows
+// them in one list and picks the field set from the section's type. The rule
+// and redirect field names and target values are fw4's own (parse_rule /
+// parse_redirect in /usr/share/ucode/fw4.uc); there is no `chain` option, so
+// the WinBox chain row is derived from src/dest and read-only.
 DomainSpec firewallDomain()
 {
     DomainSpec spec;
@@ -142,7 +183,79 @@ DomainSpec firewallDomain()
          {QStringLiteral("ACCEPT"), QStringLiteral("REJECT"), QStringLiteral("DROP")}, false},
         {QStringLiteral("masq"), QStringLiteral("Masquerade"), FieldKind::Boolean, {}, {}, false},
         {QStringLiteral("mtu_fix"), QStringLiteral("MTU fix"), FieldKind::Boolean, {}, {}, false},
+        {QStringLiteral("network"), QStringLiteral("Interfaces"), FieldKind::InterfaceRef, {}, {},
+         false},
     };
+
+    SectionSpec zones;
+    zones.type = QStringLiteral("zone");
+    zones.summaryOptions = spec.summaryOptions;
+    zones.fields = spec.fields;
+
+    SectionSpec rules;
+    rules.type = QStringLiteral("rule");
+    rules.summaryOptions = {QStringLiteral("name"), QStringLiteral("target"),
+                            QStringLiteral("proto"), QStringLiteral("dest_port")};
+    rules.fields = {
+        {QStringLiteral("name"), QStringLiteral("Rule name"), FieldKind::Text, {}, {}, false},
+        {QStringLiteral("enabled"), QStringLiteral("Enabled"), FieldKind::Boolean, {}, {},
+         false, QStringLiteral("1")},
+        {QStringLiteral("chain"), QStringLiteral("Chain (WinBox view)"), FieldKind::Chain, {},
+         {QStringLiteral("input"), QStringLiteral("forward"), QStringLiteral("output")}, true},
+        {QStringLiteral("target"), QStringLiteral("Action"), FieldKind::Choice, {},
+         {QStringLiteral("ACCEPT"), QStringLiteral("DROP"), QStringLiteral("REJECT")}, false},
+        {QStringLiteral("proto"), QStringLiteral("Protocol"), FieldKind::Choice, {},
+         {QStringLiteral("tcp"), QStringLiteral("udp"), QStringLiteral("tcpudp"),
+          QStringLiteral("icmp"), QStringLiteral("icmpv6"), QStringLiteral("igmp"),
+          QStringLiteral("esp"), QStringLiteral("ah"), QStringLiteral("all")},
+         false},
+        {QStringLiteral("src"), QStringLiteral("Source zone"), FieldKind::ZoneRef, {}, {}, false},
+        {QStringLiteral("dest"), QStringLiteral("Destination zone"), FieldKind::ZoneRef, {}, {},
+         false},
+        {QStringLiteral("src_ip"), QStringLiteral("Source address"), FieldKind::Text, {}, {},
+         false},
+        {QStringLiteral("dest_ip"), QStringLiteral("Destination address"), FieldKind::Text, {}, {},
+         false},
+        {QStringLiteral("src_port"), QStringLiteral("Source port"), FieldKind::Text, {}, {}, false},
+        {QStringLiteral("dest_port"), QStringLiteral("Destination port"), FieldKind::Text, {}, {},
+         false},
+        {QStringLiteral("icmp_type"), QStringLiteral("ICMP type"), FieldKind::Text, {}, {}, false},
+        {QStringLiteral("family"), QStringLiteral("Family"), FieldKind::Choice, {},
+         {QStringLiteral("any"), QStringLiteral("ipv4"), QStringLiteral("ipv6")}, false},
+        {QStringLiteral("limit"), QStringLiteral("Rate limit"), FieldKind::Text, {}, {}, false},
+    };
+
+    SectionSpec redirects;
+    redirects.type = QStringLiteral("redirect");
+    redirects.summaryOptions = {QStringLiteral("name"), QStringLiteral("target"),
+                                QStringLiteral("proto"), QStringLiteral("src_dport"),
+                                QStringLiteral("dest_ip"), QStringLiteral("dest_port")};
+    redirects.fields = {
+        {QStringLiteral("name"), QStringLiteral("Redirect name"), FieldKind::Text, {}, {}, false},
+        {QStringLiteral("enabled"), QStringLiteral("Enabled"), FieldKind::Boolean, {}, {},
+         false, QStringLiteral("1")},
+        {QStringLiteral("target"), QStringLiteral("Action"), FieldKind::Choice, {},
+         {QStringLiteral("DNAT"), QStringLiteral("SNAT")}, false},
+        {QStringLiteral("proto"), QStringLiteral("Protocol"), FieldKind::Choice, {},
+         {QStringLiteral("tcp"), QStringLiteral("udp"), QStringLiteral("tcpudp")}, false},
+        {QStringLiteral("src"), QStringLiteral("Source zone"), FieldKind::ZoneRef, {}, {}, false},
+        {QStringLiteral("dest"), QStringLiteral("Destination zone"), FieldKind::ZoneRef, {}, {},
+         false},
+        {QStringLiteral("src_dport"), QStringLiteral("External port"), FieldKind::Text, {}, {},
+         false},
+        {QStringLiteral("dest_ip"), QStringLiteral("Internal address"), FieldKind::Text, {}, {},
+         false},
+        {QStringLiteral("dest_port"), QStringLiteral("Internal port"), FieldKind::Text, {}, {},
+         false},
+        {QStringLiteral("src_ip"), QStringLiteral("Source address"), FieldKind::Text, {}, {}, false},
+        {QStringLiteral("src_port"), QStringLiteral("Source port"), FieldKind::Text, {}, {}, false},
+        {QStringLiteral("family"), QStringLiteral("Family"), FieldKind::Choice, {},
+         {QStringLiteral("any"), QStringLiteral("ipv4"), QStringLiteral("ipv6")}, false},
+        {QStringLiteral("reflection"), QStringLiteral("NAT reflection"), FieldKind::Boolean, {}, {},
+         false},
+    };
+
+    spec.sections = {zones, rules, redirects};
     return spec;
 }
 
@@ -159,7 +272,8 @@ DomainSpec dhcpDomain()
     spec.summaryOptions = {QStringLiteral("interface"), QStringLiteral("start"),
                            QStringLiteral("limit"), QStringLiteral("leasetime")};
     spec.fields = {
-        {QStringLiteral("interface"), QStringLiteral("Interface"), FieldKind::Text, {}, {}, false},
+        {QStringLiteral("interface"), QStringLiteral("Interface"), FieldKind::InterfaceRef, {}, {},
+         false},
         {QStringLiteral("start"), QStringLiteral("Pool start"), FieldKind::Integer, {}, {}, false},
         {QStringLiteral("limit"), QStringLiteral("Pool size"), FieldKind::Integer, {}, {}, false},
         {QStringLiteral("leasetime"), QStringLiteral("Lease time"), FieldKind::Text,
