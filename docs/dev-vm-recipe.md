@@ -35,13 +35,16 @@ this. Convert the raw image to qcow2 so snapshots work:
     qemu-system-x86_64 -machine q35,accel=kvm -cpu host -m 512 -smp 2 \
       -drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd \
       -drive if=pflash,format=raw,file=.vm/OVMF_VARS.fd \
-      -drive file=.vm/openwrt-dev.qcow2,format=qcow2,if=virtio \
+      -drive file=.vm/openwrt-dev.qcow2,format=qcow2,if=none,id=disk \
+      -device virtio-blk-pci,drive=disk,bootindex=1 \
       -netdev user,id=lan,net=192.168.77.0/24,host=192.168.77.2,dhcpstart=192.168.77.100,\
     hostfwd=tcp:127.0.0.1:10022-192.168.77.1:22,\
     hostfwd=tcp:127.0.0.1:10080-192.168.77.1:80,\
     hostfwd=tcp:127.0.0.1:10443-192.168.77.1:443 \
-      -device virtio-net-pci,netdev=lan \
-      -netdev user,id=wan -device virtio-net-pci,netdev=wan \
+      -device virtio-net-pci,netdev=lan,bootindex=2 \
+      -netdev user,id=wan -device virtio-net-pci,netdev=wan,bootindex=3 \
+      -netdev socket,id=lan2,connect=127.0.0.1:15077 \
+      -device virtio-net-pci,netdev=lan2 \
       -display none -serial unix:.vm/serial.sock,server=on,wait=off
 
 Two corrections to the first draft, both measured:
@@ -55,6 +58,48 @@ Two corrections to the first draft, both measured:
 - `-m 512` is enough, but the ext4 rootfs of the combined image is only ~120 MB
   virtual; `apk add luci-base` + sqm fits (22.6 MiB of packages), heavier sets
   need `qemu-img resize`.
+- Boot order is not `-boot order=c`: OVMF reads its own NVRAM `BootOrder`, and
+  once a third NIC exists that order starts with PXE/HTTP boot, which cost
+  **2-3 minutes** of DHCP/HTTP timeouts before the disk was tried. `-boot
+  order=c` did not change it. A `bootindex=1` on `-device virtio-blk-pci`
+  (plus 2/3 on the NICs) does: the guest reaches SSH in ~21 s.
+
+## The discovery segment (why there is a third NIC)
+
+Measured 2026-11-12: **slirp does not forward multicast.** With umdns running in
+the guest and its announcements captured on `br-lan` inside the VM
+(`192.168.77.1.5353 > 224.0.0.251.5353`, A + PTR records), `tcpdump -i any udp
+port 5353` on the host saw 483 packets in 25 s — every one of them from the
+host's own LAN (10.50.1.0/23) or docker bridges, none from 192.168.77.1. The
+host has no interface on that slirp segment at all, so it cannot join
+224.0.0.251 there.
+
+A tap device is not available: this kernel has no `tun` module (`ip tuntap add`
+fails with `open: No such device`, `modprobe tun` → module not found). veth
+works (docker uses it), so the lab segment is a veth pair whose QEMU end is fed
+by `scripts/mdns-l2-relay.py`, an L2 relay for QEMU's `-netdev socket` stream:
+
+    guest eth2 192.168.78.1  <->  QEMU socket netdev  <->  relay  <->  rcnet-qemu ~~ rcnet-host 192.168.78.2/24
+
+The relay forwards Ethernet frames in both directions (4-byte length prefix,
+QEMU's stream framing), so the host kernel — and therefore a QUdpSocket joined
+to 224.0.0.251 on `rcnet-host` — sees the guest's real mDNS packets, and the
+guest answers ARP/ping on 192.168.78.1. `scripts/dev-vm.sh` creates the veth
+(sudo), starts the relay (sudo, port 15077) and attaches the NIC; `DISCOVERY_LAN=0`
+skips the whole thing when discovery is not being worked on.
+
+`scripts/vm-discovery-setup.sh` provisions the guest side (idempotent, over SSH
+on 10022): `apk add umdns`, `network.lan2` static 192.168.78.1/24 on eth2, lan2
+in the lan firewall zone, lan2 in `umdns.@umdns[-1].network`, and the
+`umdns-announce` timer described in
+[ubus-rpcd-read-surface.md](ubus-rpcd-read-surface.md#router-auto-discovery-connect-window).
+
+The VM's hostname is `openwrt-dev` (`uci set system.@system[0].hostname`), so the
+discovered name is unambiguous next to the other mDNS hosts on the desk LAN.
+Only one QEMU instance can hold the forwards and the relay port, so `.vm/` and
+the running VM belong to the worktree that started it: stop it before booting
+from another worktree.
+
 
 The guest LAN is renumbered to 192.168.77.1/24 so no address on this host can be
 confused with the production router at 192.168.1.1:
@@ -137,6 +182,26 @@ pushes traffic, captures the tree and two graph frames 4 s apart:
 `docs/evidence/m2-interfaces-view.png`, `docs/evidence/m2-interface-graph.png`).
 The certificate trust prompt is captured the same way with `EXTRA_ARGS="" WAIT=5`
 after deleting `~/.config/open-broadcast/router-console.conf`.
+
+## Discovery checks
+
+    ctest --test-dir build -LE vm-boot --output-on-failure   # connect + discovery
+    ctest --test-dir build -L vm-boot --output-on-failure    # reboots the VM first
+
+`build/tests/discovery-smoke` starts the same `AppEngine` the connect window
+uses and exits 0 only when the router shows up in the discovered list:
+
+    $ ./build/tests/discovery-smoke --hostname openwrt-dev --address 192.168.78.1 --timeout 10000
+    DISCOVERED openwrt-dev 192.168.78.1:443 after 808 ms
+
+The `vm-boot` test is the stated requirement — reboot, wait for ubus login, let
+the boot-time announcements pass, then a clean client start:
+
+    $ ctest --test-dir build -L vm-boot --output-on-failure
+    == letting the boot-time announcements pass (15s)
+    == clean client start: discovery must find the router within 10 s
+    DISCOVERED openwrt-dev 192.168.78.1:443 after 3437 ms
+
 
 ## Traffic generator for graph checks
 

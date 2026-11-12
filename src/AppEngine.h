@@ -5,10 +5,13 @@
 #include <QObject>
 #include <QThread>
 
+#include "protocol/MdnsTypes.h"
+#include "DiscoveredHostsModel.h"
 #include "protocol/UbusTypes.h"
 
 class UbusClient;
 class InterfacesModel;
+class MdnsDiscovery;
 
 // Owns the connection lifecycle and exposes it to QML as plain properties.
 // The ubus client lives in its own thread; every call into it is queued and
@@ -30,6 +33,9 @@ class AppEngine : public QObject
     Q_PROPERTY(bool trustPending READ trustPending NOTIFY stateChanged)
     Q_PROPERTY(QString trustFingerprint READ trustFingerprint NOTIFY stateChanged)
     Q_PROPERTY(QAbstractItemModel *interfaces READ interfacesModel CONSTANT)
+    Q_PROPERTY(QAbstractItemModel *discoveredHosts READ discoveredHosts CONSTANT)
+    Q_PROPERTY(int discoveredCount READ discoveredCount NOTIFY discoveredChanged)
+    Q_PROPERTY(QString discoveryStatus READ discoveryStatus NOTIFY discoveredChanged)
 
 public:
     explicit AppEngine(QObject *parent = nullptr);
@@ -47,6 +53,9 @@ public:
     QString target() const { return m_board.target; }
     QString trustFingerprint() const { return QString::fromLatin1(m_pendingPin); }
     QAbstractItemModel *interfacesModel() const;
+    QAbstractItemModel *discoveredHosts() { return &m_discovered; }
+    int discoveredCount() const { return m_discovered.count(); }
+    QString discoveryStatus() const { return m_discoveryStatus; }
 
     Q_INVOKABLE void connectTo(const QString &host, const QString &port, const QString &username,
                                const QString &password);
@@ -56,6 +65,7 @@ public:
 
 signals:
     void stateChanged();
+    void discoveredChanged();
 
 private:
     enum class State { Idle, Connecting, TrustPending, Connected, Failed };
@@ -70,10 +80,15 @@ private:
     void onBoardFailed(const Ubus::Error &error);
     void onCertificateRequired(const QString &host, const QByteArray &fingerprint);
     void onCertificateRejected(const QString &reason);
+    void onHostDiscovered(const Mdns::Host &host);
 
     QThread m_thread;
     UbusClient *m_client = nullptr;
     InterfacesModel *m_interfaces = nullptr;
+    QThread m_discoveryThread;
+    MdnsDiscovery *m_discovery = nullptr;
+    DiscoveredHostsModel m_discovered;
+    QString m_discoveryStatus;
     State m_state = State::Idle;
     Ubus::BoardInfo m_board;
     QString m_host;
