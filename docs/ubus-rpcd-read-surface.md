@@ -7,6 +7,20 @@ available via `/ubus/subscribe/` (uhttpd advisory CVE-2025-53386 names it; it is
 shipped in 25.12.x) — WebSocket for graphs at >=1 Hz; poll JSON-RPC at 1 Hz is the
 fallback and is fine for a first pass.
 
+## Router auto-discovery (connect window)
+
+WinBox discovers routers with MNDP; the OpenWrt equivalent is `umdns` (mDNS-based,
+UDP multicast on the LAN). Mechanism: client joins the multicast group and listens
+for OpenWrt service announcements; discovered routers appear in the connect window
+with hostname + IP, one click to prefill.
+
+- Do NOT hardcode service record names from memory: bring up the VM with umdns
+  enabled, capture the actual announcements (`tcpdump -i br-lan udp port 5353`),
+  and write the record names/TXT fields observed into this doc. Then implement
+  the listener against the measured records.
+- Discovery must degrade silently: no umdns => manual address entry (already the
+  fallback in Connect.qml). Never block connect on discovery.
+
 ## System / board
 
 - `system.board` — model, firmware (release), kernel, hostname.

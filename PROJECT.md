@@ -10,8 +10,9 @@ The finish line lives in the north star `router-console`:
 ## Scope (settled with Pat, 2026-11-12)
 
 - OpenWrt-only. The MikroTik ax² keeps WinBox; dual-protocol is a later extension.
-- Feature parity with WinBox 4's core (connect window, left tree, dockable tool
-  windows, live graphs, staged apply) + tool tier (ping, traceroute, port scan,
+- Feature parity with WinBox 4's core (connect window with MNDP-equivalent
+  router auto-discovery, left tree, dockable tool windows, live graphs, staged
+  apply) + tool tier (ping, traceroute, port scan,
   torch-style per-host bandwidth, files + sysupgrade, SQM/CAKE stats) + first-class
   native views for OUR custom LuCI apps via a plugin mechanism.
 - NOT: the general OpenWrt app ecosystem, macOS, mobile, embedding LuCI pages.
