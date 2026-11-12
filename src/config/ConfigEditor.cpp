@@ -141,7 +141,14 @@ void ConfigEditor::apply()
 
     QList<Ubus::UciSetRequest> requests;
     for (const PendingChangesModel::Change &change : m_pending) {
-        requests.append({change.config, change.section, change.option, change.newValue});
+        bool list = false;
+        if (const Ubus::UciSection *section = m_config.section(change.section)) {
+            for (const Config::FieldSpec &spec : m_spec.fieldsFor(section->type)) {
+                if (spec.option == change.option)
+                    list = spec.list;
+            }
+        }
+        requests.append({change.config, change.section, change.option, change.newValue, list});
     }
 
     setError({});

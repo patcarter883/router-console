@@ -39,6 +39,8 @@ struct FieldSpec {
     // Effective value when the section omits the option. fw4's `enabled`
     // defaults to 1, so an absent option is shown as enabled rather than blank.
     QString defaultValue;
+    // UCI list option: the staged space-separated value is written as an array.
+    bool list = false;
 };
 
 // One section type of a domain. A domain with several groups enumerates every

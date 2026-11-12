@@ -209,7 +209,7 @@ staged-changes list are generic over it. Six domains, in registry order:
 | system | system | system | 1 (anonymous) | hostname, timezone, zonename, log_size |
 | network | network | interface | 5 (loopback, lan, wan, wan6, lan2) | device, proto, ipaddr, ip6assign |
 | wireless | wireless | wifi-iface | **0 — package absent** | device, mode, ssid, network, encryption, key |
-| firewall | firewall | zone | 2 (cfg02dc81 = lan, cfg03dc81 = wan) | name, input, output, forward, masq, mtu_fix |
+| firewall | firewall | zone + rule + redirect | 2 zones (cfg02dc81 = lan, cfg03dc81 = wan) + 9 rules + 0 redirects | zone: name, network, input, output, forward, masq, mtu_fix; rule: name, enabled, chain (derived), target, proto, src, dest, src_ip, dest_ip, src_port, dest_port, icmp_type, family, limit; redirect: name, enabled, target, proto, src, dest, src_dport, dest_ip, dest_port, src_ip, src_port, family, reflection |
 | dhcp | dhcp | dhcp | 2 (lan, wan) | interface, start, limit, leasetime, dhcpv4, dhcpv6, ra, ignore |
 
 Section counts and option names are what the VM actually stores (network,
@@ -218,10 +218,20 @@ SQM choice lists from `/var/run/sqm/available_qdiscs` and `/usr/lib/sqm/*.qos`).
 
 `tests/uci_domain_staged.cpp` enforces that: it reads each package
 independently and fails if the section count differs or if any registry field
-names an option the package does not hold. Options reachable only through a
-different section type stay out of the registry — the network domain edits
-`config interface`, not `config device`, and the firewall domain edits
-`config zone`, not `config rule`.
+names an option the package does not hold. A domain may enumerate several
+section types — the firewall domain reads `zone`, `rule` and `redirect` and
+picks the field set from the selected section's type. The registry check above
+covers the primary type; the rule and redirect fields are the ones fw4's own
+`parse_rule`/`parse_redirect` accept (`/usr/share/ucode/fw4.uc`). fw4 has no
+`chain` option: it derives input/forward/output from `src`/`dest`, so the
+WinBox-style chain row is computed and read-only.
+
+**Field kinds beyond text/choice.** `FieldKind::InterfaceRef` fills its choices
+from live `network.interface.dump` names and their devices, and stays editable
+so a value outside the list can still be typed (DHCP and SQM `interface`, the
+network `device`, the firewall zone interface list). `FieldKind::ZoneRef` fills
+its choices from the zone names the loaded firewall package itself declares.
+`FieldKind::Chain` is the derived read-only WinBox row above.
 
 **Wireless on the dev VM.** There is no `wireless` package and no
 `/etc/config/wireless` on the VM (`ubus call uci configs` does not list it; `uci
@@ -236,10 +246,11 @@ the one set in this table not observed on the VM, and the test skips the
 option-presence check for an absent package instead of pretending to verify it.
 
 **List-valued options.** `uci get` answers a repeated option (`list ipaddr`,
-`list network`, `list ra_flags`) as a JSON array, and the decoder keeps scalars
-only, so such a value renders empty in the editor. None of the editable fields
-above is list-only on the VM; `firewall.zone.network` and `dhcp.ra_flags` are
-deliberately not in the registry.
+`list network`, `list icmp_type`) as a JSON array; the decoder joins the
+elements with spaces, which is also what `uci get` prints, so the editor renders
+`lan lan2` rather than an empty row. On apply the editor splits that value and
+sends the array form, so `list network` round-trips as a list; `firewall.zone.network`
+and the rules' `icmp_type`/address/port lists are editable.
 
 ## Tool tier
 

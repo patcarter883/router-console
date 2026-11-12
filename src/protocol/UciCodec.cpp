@@ -131,13 +131,21 @@ QJsonObject changesArgs(const QString &config)
 }
 
 // rpcd's uci `set` takes a `values` table (option/value pairs), not a single
-// option/value pair: the pair form answers INVALID_ARGUMENT.
+// option/value pair: the pair form answers INVALID_ARGUMENT. A list option's
+// array value creates the list elements; a space-separated string would become
+// one element containing a space.
 QJsonObject setArgs(const UciSetRequest &request)
 {
+    QJsonValue value = request.value;
+    if (request.list) {
+        QJsonArray array;
+        for (const QString &item : request.value.split(QLatin1Char(' '), Qt::SkipEmptyParts))
+            array.append(item);
+        value = array;
+    }
     return {{QStringLiteral("config"), request.config},
             {QStringLiteral("section"), request.section},
-            {QStringLiteral("values"),
-             QJsonObject{{request.option, request.value}}}};
+            {QStringLiteral("values"), QJsonObject{{request.option, value}}}};
 }
 
 QJsonObject revertArgs(const QString &config)

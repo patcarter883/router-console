@@ -4,6 +4,7 @@
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QSettings>
 #include <QTextStream>
@@ -16,6 +17,7 @@
 #include "config/ConfigModels.h"
 #include "config/DomainRegistry.h"
 #include "protocol/UbusClient.h"
+#include "protocol/UciCodec.h"
 #include "vm_probe.h"
 
 // Star check for the firewall domain's second half: firewall.rule filter rules
@@ -258,6 +260,22 @@ int main(int argc, char *argv[])
     const QString endpoint = parser.value(hostOption);
     if (int rc = skipWithoutDevVm(out, endpoint))
         return rc;
+
+    // A list-valued option must reach rpcd as an array, not as one string with
+    // a space in it (uci would store a single element). No router needed.
+    {
+        const Ubus::UciSetRequest listRequest{QStringLiteral("firewall"), QStringLiteral("cfg"),
+                                              QStringLiteral("icmp_type"),
+                                              QStringLiteral("130/0 131/0"), true};
+        const QJsonArray values =
+            Ubus::UciCodec::setArgs(listRequest).value(QStringLiteral("values"))
+                .toObject()
+                .value(QStringLiteral("icmp_type"))
+                .toArray();
+        check(values.size() == 2 && values.at(0).toString() == QLatin1String("130/0")
+                  && values.at(1).toString() == QLatin1String("131/0"),
+              QStringLiteral("list option staged as a UCI array"));
+    }
 
     AppEngine engine;
     auto *editor = qobject_cast<ConfigEditor *>(engine.configEditor(QStringLiteral("firewall")));

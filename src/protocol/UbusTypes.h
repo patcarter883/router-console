@@ -185,12 +185,14 @@ struct UciChangeSet {
     bool isEmpty() const { return changes.isEmpty(); }
 };
 
-// One option write inside a staged transaction.
+// One option write inside a staged transaction. `list` makes the codec send
+// the space-separated `value` as a UCI list (a JSON array) instead of a scalar.
 struct UciSetRequest {
     QString config;
     QString section;
     QString option;
     QString value;
+    bool list = false;
 };
 
 } // namespace Ubus
