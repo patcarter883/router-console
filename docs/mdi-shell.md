@@ -53,7 +53,8 @@ into its body and drives size; the view keeps every behaviour it had.
   marks its title bar active.
 - **Cascade / Tile / Close all** in the toolbar. Cascade uses 62 % × 66 % of the
   desktop with a 28 px step across 8 slots; tile is a `ceil(sqrt(n))` grid with a
-  3 px gap.
+  3 px gap. Both may shrink a frame below the view's preferred minimum to fit the
+  desktop — the view clips its content, the same way a squeezed WinBox window does.
 - **Drag and resize.** Title bar drags the frame (clamped so the bar stays
   reachable); the bottom-right corner resizes it, never below the view's own
   minimum size.
