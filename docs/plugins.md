@@ -92,7 +92,9 @@ than the app on the live router.
 | plugin | bound surface | on the VM | real? |
 | --- | --- | --- | --- |
 | `rist2rist` | procd `service.list {name:rist2rist}` + `uci get rist2rist` | `luci-app-rist2rist` 1.0.0-r49 apk; `/usr/bin/rist2rist` running on UDP 5000 with the packaged init, config, rpcd object and ACL | **real package and real daemon** |
-| `modemaim` | `modemaim status`, `modemaim origin` + HTTP `/luci-static/resources/modemaim/towers.json` | the app's own rpcd plugin, ACL and the real ACMA extract (3,810 rows), deployed by `cellular/router/deploy-modemaim.sh` | **real rpcd surface and real extract**; no modem, so signal is absent |
+| `modemaim` | `modemaim status`, `modemaim origin` + HTTP `/luci-static/resources/modemaim/towers.json` | the app's own rpcd plugin, ACL and the real ACMA extract (3,810 rows), deployed by `cellular/router/deploy-modemaim.sh` | **real rpcd surface and real extract**; no modem, so signal is absent (the m17 fixture stands one in) |
+| `modemaim-map` | `modemaim status/origin` + towers JSON | as `modemaim` | **real rpcd surface and real extract**; the map needs no modem |
+| `modemaim-aim` | `modemaim signal/status/origin` + towers JSON | as `modemaim`; metrics need `scripts/vm-aim-fixtures.sh` (below) | **real rpcd surface, real extract, fixture below the mbimcli boundary** |
 | `nettime` | status object + procd `service.list`, both under the router-side object name (`scripts/nettime-routerside.sh`) | the video project's nettime apk; its daemon serves `CLOCK_REALTIME` on UDP 5637 | **real provider daemon**; the status object is a shim (below) |
 
 ### rist2rist
@@ -142,6 +144,29 @@ rows, `data_date 2026-11-07T09:06:09Z`). No MBIM modem exists on the VM, so
 through the app's own `modemaim setorigin` method — a bench VM has no GPS, and
 without an origin the view cannot compute distance or bearing. The view renders
 the nearest licensed sites from the real extract at that origin.
+
+### modemaim map and aim (m17)
+
+`docs/aim-view.md` carries the design and the measured surface. In short: the
+extract's 3,810 rows aggregate to 328 sites with band, MHz, licensed azimuths
+and beamwidth; the map draws them on a local equirectangular grid centred on
+`modemaim origin`, with click-through detail; the aim window plots the same
+sites on a north-up bearing rose, holds a running peak per metric from the
+500 ms `signal` lane, and stores the marks the operator drops while turning the
+mast by hand. The serving cell is correlated through `status.mapped.site` when
+the eNB map has the cell, and the views say "unmapped" when it does not.
+
+There is no heading inference: the owner's correction is that a timed sweep
+cannot work on a hand-rotated mast, so bearings are operator-entered and the
+peak hold is a plain running maximum. Marks and peaks are session memory only —
+no disk persistence, same scope as the m16 history.
+
+The VM has no MBIM modem, so the aim numbers come from
+`scripts/vm-aim-fixtures.sh`: a stand-in `/usr/bin/mbimcli` with metrics that
+swing over a minute, plus the `enb-acma.csv` row mapping its serving cell to
+site 10021260 in the real extract. Everything from rpcd down is the app's own
+code; `plugin-data-modemaim` therefore now sees a modem-present answer on a
+fixture VM.
 
 ### nettime
 
@@ -224,10 +249,13 @@ changed.
 
 | test | what it proves |
 | --- | --- |
-| `plugin-loading` | the four manifests parse; each app declares the sources it binds to; a missing view / missing sources is rejected with its reason |
+| `plugin-loading` | every manifest parses; each app declares the sources it binds to; a missing view / missing sources is rejected with its reason |
 | `plugin-stub` | a stub added through the interface alone appears in the tree, with `git status` clean outside `plugins/` |
 | `plugin-data-rist2rist` | procd reports a **running** instance whose command is `/usr/bin/rist2rist`, with its pid and full argv; the `rist2rist` UCI package carries the packaged schema (`managed`, `api_port`) and a destination |
 | `plugin-data-modemaim` | `modemaim.status` carries the real key set and, with no modem, an empty measurement (`state: unknown`, empty `serving`, no neighbours) rather than filled-in values; `modemaim.origin` answers the configured origin; the real 3,810-row extract arrives over pinned TLS |
+| `m17-aim-model` | bearing/distance for known pairs, site aggregation from per-band rows, peak-hold over synthetic series, mark round-trip, ingest dedupe (no router) |
+| `m17-aim-live` | 32 s on the `signal` lane: ≥ 200 sites with positions and bearings, peak-hold equal to the best figures of the run, serving cell mapped to an ACMA site, a mark added through the model API that reads back |
+| `m17-aim-ui` | both m17 plugin windows load headless with no QML errors and write the evidence shots (skips without a VM) |
 | `plugin-data-nettime` | the status shim's `pid` **equals procd's** pid for the real provider, port 5637, `CLOCK_REALTIME`, enabled; `uptime`/`clients` are absent because the app provides neither |
 
 The data tests now run against the **real app packages**: `scripts/vm-real-apps.sh`
@@ -237,4 +265,5 @@ because the packaged daemon is the surface requirement 5 binds. The mock script
 is still the right tool for UI work (`scripts/vm-mock-apps.sh` + `scripts/plugin-gui.sh`).
 
 Screenshots: `scripts/plugin-gui.sh` (headless X, `PLUGIN=<id>`; `PLUGIN=tree`
-captures the tree).
+captures the tree); `scripts/m17-shot.sh` for the map and aim windows, which also
+types a bearing and presses Enter so the aim shot holds a real mark.
