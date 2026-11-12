@@ -88,6 +88,44 @@ Ubus::Error parseEnvelope(const QByteArray &payload, QJsonObject &result)
                                      : QStringLiteral("%1 (%2)").arg(statusName(status), detail)};
 }
 
+QString formatAddress(const QJsonObject &address)
+{
+    const QString ip = address.value(QStringLiteral("address")).toString();
+    const int mask = address.value(QStringLiteral("mask")).toInt(-1);
+    if (ip.isEmpty())
+        return {};
+    return mask >= 0 ? QStringLiteral("%1/%2").arg(ip).arg(mask) : ip;
+}
+
+QStringList addressList(const QJsonObject &device, const QString &key)
+{
+    QStringList addresses;
+    for (const QJsonValue &value : device.value(key).toArray()) {
+        const QString address = formatAddress(value.toObject());
+        if (!address.isEmpty())
+            addresses.append(address);
+    }
+    return addresses;
+}
+
+// statistics is a flat map of kernel counters; missing keys stay zero.
+Ubus::DeviceCounters parseCounters(const QJsonObject &statistics)
+{
+    auto counter = [&statistics](const char *key) {
+        return static_cast<quint64>(statistics.value(QLatin1String(key)).toDouble());
+    };
+    Ubus::DeviceCounters counters;
+    counters.rxBytes = counter("rx_bytes");
+    counters.txBytes = counter("tx_bytes");
+    counters.rxPackets = counter("rx_packets");
+    counters.txPackets = counter("tx_packets");
+    counters.rxErrors = counter("rx_errors");
+    counters.txErrors = counter("tx_errors");
+    counters.rxDropped = counter("rx_dropped");
+    counters.txDropped = counter("tx_dropped");
+    return counters;
+}
+
 } // namespace
 
 UbusClient::UbusClient(QObject *parent)
@@ -164,6 +202,73 @@ void UbusClient::fetchBoard()
              board.description = release.value(QStringLiteral("description")).toString();
 
              emit boardReceived(board);
+         });
+}
+
+void UbusClient::fetchInterfaces()
+{
+    call(QStringLiteral("network.interface"), QStringLiteral("dump"), {},
+         [this](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit interfacesFailed(error);
+                 return;
+             }
+
+             QList<Ubus::InterfaceInfo> interfaces;
+             for (const QJsonValue &value : result.value(QStringLiteral("interface")).toArray()) {
+                 const QJsonObject entry = value.toObject();
+                 Ubus::InterfaceInfo info;
+                 info.name = entry.value(QStringLiteral("interface")).toString();
+                 if (info.name.isEmpty())
+                     continue;
+                 info.device = entry.value(QStringLiteral("device")).toString();
+                 info.l3Device = entry.value(QStringLiteral("l3_device")).toString();
+                 info.protocol = entry.value(QStringLiteral("proto")).toString();
+                 info.up = entry.value(QStringLiteral("up")).toBool();
+                 info.pending = entry.value(QStringLiteral("pending")).toBool();
+                 info.available = entry.value(QStringLiteral("available")).toBool();
+                 info.autostart = entry.value(QStringLiteral("autostart")).toBool();
+                 info.dynamic = entry.value(QStringLiteral("dynamic")).toBool();
+                 info.uptimeSeconds =
+                     static_cast<quint64>(entry.value(QStringLiteral("uptime")).toDouble());
+                 info.ipv4Addresses = addressList(entry, QStringLiteral("ipv4-address"));
+                 info.ipv6Addresses = addressList(entry, QStringLiteral("ipv6-address"));
+                 interfaces.append(info);
+             }
+
+             emit interfacesReceived(interfaces);
+         });
+}
+
+void UbusClient::fetchDeviceStatus()
+{
+    call(QStringLiteral("network.device"), QStringLiteral("status"), {},
+         [this](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit deviceStatusFailed(error);
+                 return;
+             }
+
+             // The result is an object keyed by device name, not an array.
+             Ubus::DeviceStatusSnapshot snapshot;
+             for (auto it = result.begin(); it != result.end(); ++it) {
+                 if (!it.value().isObject())
+                     continue;
+                 const QJsonObject entry = it.value().toObject();
+                 Ubus::DeviceStatus device;
+                 device.name = it.key();
+                 device.type = entry.value(QStringLiteral("type")).toString();
+                 device.deviceType = entry.value(QStringLiteral("devtype")).toString();
+                 device.macAddress = entry.value(QStringLiteral("macaddr")).toString();
+                 device.mtu = entry.value(QStringLiteral("mtu")).toInt();
+                 device.present = entry.value(QStringLiteral("present")).toBool();
+                 device.up = entry.value(QStringLiteral("up")).toBool();
+                 device.carrier = entry.value(QStringLiteral("carrier")).toBool();
+                 device.counters = parseCounters(entry.value(QStringLiteral("statistics")).toObject());
+                 snapshot.devices.append(device);
+             }
+
+             emit deviceStatusReceived(snapshot);
          });
 }
 
