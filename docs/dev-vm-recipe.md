@@ -275,6 +275,13 @@ product uses — see the package Makefile in
 open-broadcast/open-broadcast-product-codec/luci-app-rist2rist/), `apk add` them
 in the VM. Same for luci-app-modemaim (cellular project) and nettime.
 
+For the plugin views without an SDK build, `scripts/vm-mock-apps.sh` installs
+the app fixtures the client binds to: a procd stand-in and `/etc/config/rist2rist`,
+mock rpcd scripts `modemaim` and `nettime` with the apps' JSON keys, and
+`/www/luci-static/resources/modemaim/towers.json` with the real extract schema.
+It ends by printing each surface's raw answer; docs/plugins.md states which
+parts are real and which are mocked.
+
 ## Snapshots
 
 Taken with the VM powered off (`qemu-img snapshot` must not run against a live

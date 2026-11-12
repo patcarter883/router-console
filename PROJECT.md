@@ -28,5 +28,6 @@ Qt 6 is not "similar to WinBox", it is the same technology.
 ## Layout
 
 - `src/` — Qt 6 / CMake application skeleton
+- `plugins/` — the custom app views, one directory per plugin (docs/plugins.md)
 - `docs/` — protocol notes, dev-VM recipe, WinBox 4 reference, plugin spec
 - `AGENTS.md` — the brief for coding agents

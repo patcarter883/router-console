@@ -1,11 +1,14 @@
 {
 	"router-console": {
-		"description": "router-console native client: staged UCI editing across the core config domains",
+		"description": "router-console native client: staged UCI editing across the core config domains plus the custom app plugin surfaces",
 		"read": {
 			"ubus": {
-				"uci": [ "get", "state", "changes" ]
+				"uci": [ "get", "state", "changes" ],
+				"service": [ "list" ],
+				"modemaim": [ "status", "origin", "bearing", "towers" ],
+				"nettime": [ "status" ]
 			},
-			"uci": [ "system", "network", "wireless", "firewall", "dhcp", "sqm" ]
+			"uci": [ "system", "network", "wireless", "firewall", "dhcp", "sqm", "rist2rist", "modemaim" ]
 		},
 		"write": {
 			"ubus": {

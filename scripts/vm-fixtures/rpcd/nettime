@@ -1,0 +1,24 @@
+#!/bin/sh
+# Mock of nettime's status object, for the dev VM.
+#
+# The packaged app (video project) runs a GstNetTime provider on UDP 5637 and
+# exposes no rpcd object of its own: its only real surface is the UDP clock and
+# procd's view of the daemon. This mock supplies the status surface the client
+# view reads; `uptime` tracks the VM's uptime so the window visibly updates.
+case "$1" in
+list)
+	echo '{"status":{}}'
+	;;
+call)
+	method="$2"
+	case "$method" in
+	status)
+		uptime=$(awk '{printf "%d", $1}' /proc/uptime)
+		printf '%s\n' "{\"ts\":\"$(date -Iseconds)\",\"enabled\":true,\"port\":5637,\"clock\":\"CLOCK_REALTIME\",\"provider\":\"gst_net_time_provider\",\"uptime\":${uptime},\"clients\":2}"
+		;;
+	*)
+		printf '%s\n' '{}'
+		;;
+	esac
+	;;
+esac

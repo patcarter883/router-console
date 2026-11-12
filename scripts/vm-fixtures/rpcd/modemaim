@@ -1,0 +1,36 @@
+#!/bin/sh
+# Mock of luci-app-modemaim's rpcd object, for the dev VM.
+#
+# The real script (cellular/luci-app-modemaim/root/usr/libexec/rpcd/modemaim)
+# reads MBIM signal and serving-cell data from /dev/cdc-wdm0 and resolves the
+# serving site against the ACMA extract. The VM has no modem, so this mock
+# answers the same JSON keys with fixed values; the client's view and its data
+# test bind to the shape, not to the values.
+case "$1" in
+list)
+	echo '{"status":{},"origin":{},"bearing":{}}'
+	;;
+call)
+	method="$2"
+	case "$method" in
+	status)
+		printf '%s\n' "{\"ts\":\"$(date -Iseconds)\",\"state\":\"registered\",\"pstate\":\"connected\",
+ \"plmn\":\"50502\",\"operator\":\"OPTUS\",\"tech\":\"LTE\",
+ \"mapped\":{\"site\":\"10000579\",\"conf\":\"ta\",\"source\":\"ta\"},
+ \"rssi\":\"-71\",\"rsrp\":\"-93\",\"rsrq\":\"-11\",\"sinr\":\"12.4\",
+ \"serving\":{\"pci\":\"123\",\"earfcn\":\"1650\",\"rsrp\":\"-93\",\"rsrq\":\"-11\",\"ta\":\"22\",\"ta_us\":\"1717\",\"eci\":\"142739\"},
+ \"neighbors\":[{\"pci\":321,\"earfcn\":1650,\"rsrp\":-101,\"rsrq\":-14},{\"pci\":88,\"earfcn\":1650,\"rsrp\":-108,\"rsrq\":-16}],
+ \"atNeighbors\":[{\"pci\":321,\"earfcn\":1650,\"rsrp\":-101}]}"
+		;;
+	origin)
+		printf '%s\n' '{"lat":-33.868800,"lon":151.209300,"confirmed":true}'
+		;;
+	bearing)
+		printf '%s\n' '{"bearing":277.0,"declination":12.0}'
+		;;
+	*)
+		printf '%s\n' '{}'
+		;;
+	esac
+	;;
+esac

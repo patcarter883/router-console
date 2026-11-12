@@ -227,11 +227,31 @@ the QoS scripts in `/usr/lib/sqm/*.qos`.
 ## Custom app surface (the plugin contract)
 
 Each custom LuCI app exposes its data one of two ways; the client plugin
-declares which:
-1. A ubus namespace (e.g. rist2rist's rpcd script — verify against the repo at
-   open-broadcast/open-broadcast-product-codec/luci-app-rist2rist/).
-2. An HTTP JSON endpoint under /luci-static/ (modemaim serves towers.json this
-   way; its views fetch() it — documented in ~/workspace/cellular/PROJECT.md).
+declares which in its manifest (docs/plugins.md):
+1. A ubus namespace (rpcd object), called with the session the client holds.
+2. An HTTP JSON endpoint under /luci-static/, fetched over the pinned TLS
+   connection (modemaim serves towers.json this way; its views fetch() it).
+
+### Measured per app (dev VM fixtures, 2026-11-12)
+
+| app | surface | answer |
+| --- | --- | --- |
+| rist2rist | `service list {"name":"rist2rist"}` | `{ "rist2rist": { "instances": { "instance1": { "running": true, "pid": ... } } } }`; `[0]` with no object when not running |
+| rist2rist | `uci get {"config":"rist2rist"}` | `{"values":{"main":{".type":"rist2rist","listen_url":...,"profile":...},"wan_a":{".type":"destination","address":...,"weight":...}}}` |
+| modemaim | `modemaim status` | `ts,state,pstate,plmn,operator,tech,mapped{site,conf,source},rssi,rsrp,rsrq,sinr,serving{pci,earfcn,rsrp,rsrq,ta,ta_us,eci},neighbors[],atNeighbors[]` |
+| modemaim | `modemaim origin` | `{"lat":...,"lon":...,"confirmed":...}` |
+| modemaim | `GET /luci-static/resources/modemaim/towers.json` | `{source,generated,data_date,bbox,towers[{site,lat,lon,band,mhz,bw,eirp,h,azs,hbw,carrier}]}` — static by design: over the 1 MiB ubus cap rpcd drops the whole object |
+| nettime | `nettime status` | `{ts,enabled,port,clock,provider,uptime,clients}` — **mock**: the packaged app exposes only the UDP 5637 GstNetTime provider, no rpcd object |
+
+The LuCI apps are not installed in the VM (no OpenWrt SDK build in this
+milestone); `scripts/vm-mock-apps.sh` installs a mock rpcd script for modemaim
+and nettime, a procd stand-in + `/etc/config/rist2rist` for rist2rist, and a
+small tower extract with the real schema. modemaim's mock answers the real
+script's keys verbatim; nettime's does not correspond to any shipped method.
+
+The client ACL (`scripts/router-console.acl.json`) grants `service list`,
+`modemaim status/origin/bearing/towers`, `nettime status` and read access to
+the `rist2rist` and `modemaim` UCI packages.
 
 ## Auth
 
