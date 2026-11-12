@@ -3,6 +3,8 @@
 #include <QCoreApplication>
 #include <QSettings>
 
+#include "DiscoveredHostsModel.h"
+#include "protocol/MdnsDiscovery.h"
 #include "protocol/UbusClient.h"
 
 AppEngine::AppEngine(QObject *parent) : QObject(parent)
@@ -15,6 +17,7 @@ AppEngine::AppEngine(QObject *parent) : QObject(parent)
     qRegisterMetaType<Ubus::Session>();
     qRegisterMetaType<Ubus::BoardInfo>();
     qRegisterMetaType<Ubus::Error>();
+    qRegisterMetaType<Mdns::Host>();
 
     m_client = new UbusClient;
     m_client->moveToThread(&m_thread);
@@ -28,12 +31,37 @@ AppEngine::AppEngine(QObject *parent) : QObject(parent)
     connect(m_client, &UbusClient::certificateRejected, this, &AppEngine::onCertificateRejected);
 
     m_thread.start();
+
+    // Discovery never blocks connecting: it starts on its own thread and the
+    // connect window falls back to manual entry when nothing is found.
+    m_discovery = new MdnsDiscovery;
+    m_discovery->moveToThread(&m_discoveryThread);
+    connect(&m_discoveryThread, &QThread::finished, m_discovery, &QObject::deleteLater);
+    connect(m_discovery, &MdnsDiscovery::hostFound, this, &AppEngine::onHostDiscovered);
+    connect(m_discovery, &MdnsDiscovery::stateChanged, this, [this](const QString &text) {
+        m_discoveryStatus = text;
+        emit discoveredChanged();
+    });
+    connect(&m_discovered, &DiscoveredHostsModel::countChanged, this,
+            &AppEngine::discoveredChanged);
+    m_discoveryThread.start();
+    QMetaObject::invokeMethod(m_discovery, &MdnsDiscovery::start, Qt::QueuedConnection);
 }
 
 AppEngine::~AppEngine()
 {
+    if (m_discovery) {
+        QMetaObject::invokeMethod(m_discovery, &MdnsDiscovery::stop, Qt::BlockingQueuedConnection);
+    }
+    m_discoveryThread.quit();
+    m_discoveryThread.wait();
     m_thread.quit();
     m_thread.wait();
+}
+
+void AppEngine::onHostDiscovered(const Mdns::Host &host)
+{
+    m_discovered.upsert(host);
 }
 
 QString AppEngine::settingsKey() const
