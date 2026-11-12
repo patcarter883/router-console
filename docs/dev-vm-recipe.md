@@ -273,11 +273,13 @@ never share a qcow2).
 Build x86/64 .apk for luci-app-rist2rist via the OpenWrt SDK (same feed the
 product uses — see the package Makefile in
 open-broadcast/open-broadcast-product-codec/luci-app-rist2rist/), `apk add` them
-in the VM. Same for luci-app-modemaim (cellular project) and nettime.
+in the VM. Same for luci-app-modemaim (cellular project) and the video project's
+nettime package.
 
 For the plugin views without an SDK build, `scripts/vm-mock-apps.sh` installs
 the app fixtures the client binds to: a procd stand-in and `/etc/config/rist2rist`,
-mock rpcd scripts `modemaim` and `nettime` with the apps' JSON keys,
+mock rpcd scripts for `modemaim` and the nettime status object with the apps'
+JSON keys,
 `/www/luci-static/resources/modemaim/towers.json` with the real extract schema,
 and the plugin surfaces' own rpcd ACL group (`scripts/plugins.acl.json`).
 It ends by printing each surface's raw answer; docs/plugins.md states which

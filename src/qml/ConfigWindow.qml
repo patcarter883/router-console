@@ -14,12 +14,15 @@ Window {
 
     property string domainId: ""
     property var editor: null
+    // Automation hook (--config-section): select this section once loaded.
+    property string initialSection: ""
+    property bool initialSectionApplied: false
     // Automation hook (--stage option=value): staged once the package is read.
     property string stageAfterLoad: ""
     property bool stageApplied: false
 
     width: 920
-    height: 620
+    height: 800
     minimumWidth: 700
     minimumHeight: 460
     title: win.editor ? qsTr("Config — %1").arg(win.editor.title) : qsTr("Config")
@@ -39,8 +42,14 @@ Window {
     Connections {
         target: win.editor
         function onStateChanged() {
-            if (!win.editor || win.stageApplied || win.stageAfterLoad.length === 0
-                    || !win.editor.loaded)
+            if (!win.editor || !win.editor.loaded) {
+                return
+            }
+            if (!win.initialSectionApplied && win.initialSection.length > 0) {
+                win.initialSectionApplied = true
+                win.editor.selectSection(win.initialSection)
+            }
+            if (win.stageApplied || win.stageAfterLoad.length === 0)
                 return
             const parts = win.stageAfterLoad.split("=")
             if (parts.length !== 2)
@@ -101,6 +110,7 @@ Window {
                     delegate: Rectangle {
                         id: sectionRow
                         required property string name
+                        required property string type
                         required property string summary
 
                         width: sectionList.width
@@ -116,13 +126,16 @@ Window {
                             spacing: 2
 
                             Text {
-                                text: sectionRow.name
+                                text: sectionRow.summary.length > 0 ? sectionRow.summary
+                                                                    : sectionRow.name
                                 color: "#e8e8e8"
                                 font.pixelSize: 13
                                 font.bold: true
+                                width: 200
+                                elide: Text.ElideRight
                             }
                             Text {
-                                text: sectionRow.summary
+                                text: sectionRow.type + " · " + sectionRow.name
                                 color: "#7a7a7a"
                                 font.pixelSize: 10
                                 width: 190
@@ -162,6 +175,7 @@ Window {
                             required property string value
                             required property string original
                             required property bool changed
+                            required property bool readOnly
 
                             Layout.fillWidth: true
                             spacing: 10
@@ -187,7 +201,33 @@ Window {
                             }
 
                             ComboBox {
-                                visible: fieldRow.kind === "choice"
+                                visible: fieldRow.kind === "choice" || fieldRow.kind === "chain"
+                                enabled: !fieldRow.readOnly
+                                Layout.preferredWidth: 240
+                                model: fieldRow.choices
+                                currentIndex: Math.max(0, fieldRow.choices.indexOf(fieldRow.value))
+                                onActivated: win.editor.stageValue(fieldRow.option, currentText)
+                            }
+
+                            // Interface references: the live interface names, with
+                            // free text still accepted for anything outside the list.
+                            ComboBox {
+                                visible: fieldRow.kind === "interface-ref"
+                                Layout.preferredWidth: 240
+                                editable: true
+                                model: fieldRow.choices
+                                currentIndex: fieldRow.choices.indexOf(fieldRow.value)
+                                Component.onCompleted: {
+                                    if (currentIndex < 0 && fieldRow.value.length > 0)
+                                        editText = fieldRow.value
+                                }
+                                onActivated: win.editor.stageValue(fieldRow.option, currentText)
+                                onAccepted: win.editor.stageValue(fieldRow.option, editText)
+                            }
+
+                            // Zone references: the zones this package declares.
+                            ComboBox {
+                                visible: fieldRow.kind === "zone-ref"
                                 Layout.preferredWidth: 240
                                 model: fieldRow.choices
                                 currentIndex: Math.max(0, fieldRow.choices.indexOf(fieldRow.value))

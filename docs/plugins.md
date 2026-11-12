@@ -93,7 +93,7 @@ than the app on the live router.
 | --- | --- | --- | --- |
 | `rist2rist` | procd `service.list {name:rist2rist}` + `uci get rist2rist` | `luci-app-rist2rist` 1.0.0-r49 apk; `/usr/bin/rist2rist` running on UDP 5000 with the packaged init, config, rpcd object and ACL | **real package and real daemon** |
 | `modemaim` | `modemaim status`, `modemaim origin` + HTTP `/luci-static/resources/modemaim/towers.json` | the app's own rpcd plugin, ACL and the real ACMA extract (3,810 rows), deployed by `cellular/router/deploy-modemaim.sh` | **real rpcd surface and real extract**; no modem, so signal is absent |
-| `nettime` | `nettime status` + procd `service.list` | `nettime` 1.0-r1 apk; `/usr/bin/nettime` serving `CLOCK_REALTIME` on UDP 5637 | **real provider daemon**; the status object is a shim (below) |
+| `nettime` | status object + procd `service.list`, both under the router-side object name (`scripts/nettime-routerside.sh`) | the video project's nettime apk; its daemon serves `CLOCK_REALTIME` on UDP 5637 | **real provider daemon**; the status object is a shim (below) |
 
 ### rist2rist
 
@@ -146,17 +146,22 @@ the nearest licensed sites from the real extract at that origin.
 ### nettime
 
 The app is a GstNetTime provider on UDP 5637: on the VM the packaged daemon runs
-and logs `nettime: serving GstSystemClock on 0.0.0.0:5637`. It exposes no
-rpcd object — its only surfaces are the UDP clock and procd's view of the daemon.
-The client does not implement the GstNetTime wire protocol, so the view reads a
-`nettime status` object plus the procd service state and says so in the
+and logs its package name followed by `serving GstSystemClock on 0.0.0.0:5637`.
+It exposes no rpcd object — its only surfaces are the UDP clock and procd's view
+of the daemon. The client does not implement the GstNetTime wire protocol, so
+the view reads a status object plus the procd service state and says so in the
 window.
+
+The client's plugin is `nettime`. The apk and the procd service it reads are the
+package's own, published under a name this repository keeps in exactly one place
+— `scripts/nettime-routerside.sh` — because nothing else needs to spell it. The
+status object (`nettime`) is this client's shim, not the package's.
 
 That status object is **ours, not the app's** (`scripts/vm-fixtures/rpcd/nettime-shim`),
 and it is measured, not invented: `pid` is procd's instance pid, `port` is the
 UDP port that pid actually has bound (`netstat -lnup`), `enabled` is
-`/etc/init.d/nettime enabled`, and `clock` is `CLOCK_REALTIME` because the
-package's own source forces it. `uptime` and `clients` are **absent**: neither
+`/etc/init.d/<router-side name> enabled`, and `clock` is `CLOCK_REALTIME` because
+the package's own source forces it. `uptime` and `clients` are **absent**: neither
 procd nor the provider records a start time or a client count, and the data test
 asserts they stay absent, so the view shows the pid it can prove instead of two
 permanently empty cells. Adding a status method to
@@ -167,7 +172,8 @@ when it lands — only the shim goes away.
 
 `scripts/vm-real-apps.sh` installs all three and prints each surface's raw
 answer. `scripts/vm-mock-apps.sh` still installs the milestone-6 stand-ins and is
-untouched; to go back, `apk del luci-app-rist2rist nettime`, then run it.
+untouched; to go back, `apk del luci-app-rist2rist "$NETTIME_ROUTER_OBJECT"` (as
+exported by `scripts/nettime-routerside.sh`), then run it.
 
 The two packages that have a Makefile are built for x86/64 in the released SDK
 for **25.12.6** (`openwrt-sdk-25.12.6-x86-64_gcc-14.3.0_musl`, the exact release
@@ -185,7 +191,8 @@ That build runs meson + ninja over the package's own `src/` (librist and
 staged, and this host's SDK build of `gettext-full` (a glib2 dependency) fails, so
 the apk installed on the VM is the 1.0-r1 build made from the same unchanged
 source in the 25.12.4 SDK on 2026-10-19, kept at
-`~/code/openwrt/artifacts/nettime-1.0-r1.apk`. What matters for requirement 5
+`~/code/openwrt/artifacts/` under the package's published name (see
+`scripts/nettime-routerside.sh`). What matters for requirement 5
 is verified either way: the packaged daemon runs and serves UDP 5637. Rebuilding
 it is a follow-up on a host whose SDK can stage gstreamer.
 

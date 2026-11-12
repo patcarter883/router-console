@@ -5,9 +5,14 @@
 # GstNetTime provider) — the client reads the same JSON shapes the real apps
 # produce. towers.json is a small extract with the real schema.
 #
+# The nettime fixtures are installed under the router-side service name
+# (scripts/nettime-routerside.sh): the client's plugin id is `nettime`, but the
+# rpcd object and the procd service it reads keep the package's published name.
+#
 #   SSHP=10022 scripts/vm-mock-apps.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/nettime-routerside.sh
 
 SSHP=${SSHP:-10022}
 SSHOPTS=(-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
@@ -24,18 +29,18 @@ put www/luci-static/resources/modemaim/towers.json /www/luci-static/resources/mo
 put rpcd/modemaim /usr/libexec/rpcd/modemaim
 put rpcd/nettime /usr/libexec/rpcd/nettime
 put init.d/rist2rist /etc/init.d/rist2rist
-put init.d/nettime /etc/init.d/nettime
+put init.d/nettime "/etc/init.d/$NETTIME_ROUTER_OBJECT"
 
 # The plugin surfaces get their own ACL group: scripts/router-console.acl.json
 # is shared with the tool-tier work, and a separate file cannot be clobbered by
 # that file being reinstalled.
 ssh_vm "cat > /usr/share/rpcd/acl.d/router-console-plugins.json" < scripts/plugins.acl.json
 
-ssh_vm 'chmod +x /usr/libexec/rpcd/modemaim /usr/libexec/rpcd/nettime \
-        /etc/init.d/rist2rist /etc/init.d/nettime;
+ssh_vm "chmod +x /usr/libexec/rpcd/modemaim /usr/libexec/rpcd/nettime \
+        /etc/init.d/rist2rist /etc/init.d/$NETTIME_ROUTER_OBJECT;
         /etc/init.d/rist2rist enable; /etc/init.d/rist2rist restart;
-        /etc/init.d/nettime enable; /etc/init.d/nettime restart;
-        /etc/init.d/rpcd restart >/dev/null 2>&1'
+        /etc/init.d/$NETTIME_ROUTER_OBJECT enable; /etc/init.d/$NETTIME_ROUTER_OBJECT restart;
+        /etc/init.d/rpcd restart >/dev/null 2>&1"
 sleep 2
 
 echo "--- service registration"
@@ -45,7 +50,7 @@ ssh_vm 'ubus call modemaim status'
 echo "--- modemaim origin"
 ssh_vm 'ubus call modemaim origin'
 echo "--- nettime status"
-ssh_vm 'ubus call nettime status'
+ssh_vm "ubus call $NETTIME_ROUTER_OBJECT status"
 echo "--- rist2rist config"
 ssh_vm 'ubus call uci get "{\"config\":\"rist2rist\"}" | head -12'
 echo "--- towers.json served"

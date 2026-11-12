@@ -22,6 +22,8 @@ ConfigEditor::ConfigEditor(UbusClient *client, const Config::DomainSpec &spec, Q
         connect(m_client, &UbusClient::uciApplyFailed, this, &ConfigEditor::onApplyFailed);
         connect(m_client, &UbusClient::uciReverted, this, &ConfigEditor::onReverted);
         connect(m_client, &UbusClient::uciRevertFailed, this, &ConfigEditor::onRevertFailed);
+        connect(m_client, &UbusClient::interfacesReceived, this,
+                &ConfigEditor::onInterfacesReceived);
     }
 }
 
@@ -41,7 +43,21 @@ QString ConfigEditor::value(const QString &option) const
             return *staged;
     }
     if (const Ubus::UciSection *section = currentUciSection())
-        return section->option(option);
+        return effectiveValue(*section, option);
+    return {};
+}
+
+// Stored value, or the field's effective default when the option is absent
+// (fw4's `enabled` is on unless the section says otherwise).
+QString ConfigEditor::effectiveValue(const Ubus::UciSection &section, const QString &option) const
+{
+    const QString stored = section.option(option);
+    if (!stored.isEmpty())
+        return stored;
+    for (const Config::FieldSpec &spec : m_spec.fieldsFor(section.type)) {
+        if (spec.option == option)
+            return spec.defaultValue;
+    }
     return {};
 }
 
@@ -53,9 +69,28 @@ void ConfigEditor::reload()
     m_absent = false;
     setError({});
     setBusy(true, QStringLiteral("reading %1…").arg(m_spec.config));
+    m_mergeConfig = {};
+    m_mergeConfig.name = m_spec.config;
+    m_pendingTypes = m_spec.sectionTypes();
+    m_collecting = !m_pendingTypes.isEmpty();
+    if (m_interfaceNames.isEmpty()) {
+        QMetaObject::invokeMethod(m_client, &UbusClient::fetchInterfaces, Qt::QueuedConnection);
+    }
+    readNextSectionType();
+}
+
+void ConfigEditor::readNextSectionType()
+{
+    if (!m_client)
+        return;
+    if (m_pendingTypes.isEmpty()) {
+        m_collecting = false;
+        applyRead(m_mergeConfig);
+        return;
+    }
+    const QString type = m_pendingTypes.takeFirst();
     QMetaObject::invokeMethod(m_client, "uciGetConfig", Qt::QueuedConnection,
-                              Q_ARG(QString, m_spec.config),
-                              Q_ARG(QString, m_spec.sectionType));
+                              Q_ARG(QString, m_spec.config), Q_ARG(QString, type));
 }
 
 void ConfigEditor::selectSection(const QString &name)
@@ -73,7 +108,12 @@ void ConfigEditor::stageValue(const QString &option, const QString &value)
     if (!section)
         return;
 
-    const QString committed = section->option(option);
+    for (const Config::FieldSpec &spec : m_spec.fieldsFor(section->type)) {
+        if (spec.option == option && spec.readOnly)
+            return;
+    }
+
+    const QString committed = effectiveValue(*section, option);
     QMap<QString, QString> &sectionStaged = m_staged[m_section];
     if (value == committed)
         sectionStaged.remove(option);
@@ -101,7 +141,14 @@ void ConfigEditor::apply()
 
     QList<Ubus::UciSetRequest> requests;
     for (const PendingChangesModel::Change &change : m_pending) {
-        requests.append({change.config, change.section, change.option, change.newValue});
+        bool list = false;
+        if (const Ubus::UciSection *section = m_config.section(change.section)) {
+            for (const Config::FieldSpec &spec : m_spec.fieldsFor(section->type)) {
+                if (spec.option == change.option)
+                    list = spec.list;
+            }
+        }
+        requests.append({change.config, change.section, change.option, change.newValue, list});
     }
 
     setError({});
@@ -135,9 +182,24 @@ void ConfigEditor::onConfigReceived(const Ubus::UciConfig &config)
     if (config.name != m_spec.config)
         return;
 
+    if (m_collecting) {
+        m_mergeConfig.sections.append(config.sections);
+        if (!m_pendingTypes.isEmpty()) {
+            readNextSectionType();
+            return;
+        }
+        m_collecting = false;
+        applyRead(m_mergeConfig);
+        return;
+    }
+    applyRead(config);
+}
+
+void ConfigEditor::applyRead(const Ubus::UciConfig &config)
+{
     m_config = config;
     m_loaded = true;
-    m_sections.setSections(config.sections, m_spec.summaryOptions);
+    m_sections.setSections(config.sections, m_spec);
 
     if (m_config.section(m_section) == nullptr) {
         m_section = config.sections.isEmpty() ? QString() : config.sections.first().name;
@@ -161,9 +223,11 @@ void ConfigEditor::onConfigFailed(const Ubus::Error &error)
     // failed read. Anything else is a failure.
     if (error.status == Ubus::Status::NotFound) {
         m_absent = true;
+        m_pendingTypes.clear();
+        m_collecting = false;
         Ubus::UciConfig missing;
         missing.name = m_spec.config;
-        onConfigReceived(missing);
+        applyRead(missing);
         return;
     }
     setBusy(false, QStringLiteral("read failed"));
@@ -220,7 +284,82 @@ void ConfigEditor::rebuildFields()
         m_fields.setRows({}, {}, {});
         return;
     }
-    m_fields.setRows(m_spec.fields, section->options, m_staged.value(m_section));
+
+    QList<Config::FieldSpec> specs = m_spec.fieldsFor(section->type);
+    QMap<QString, QString> originals = section->options;
+    for (const Config::FieldSpec &spec : specs) {
+        if (!originals.contains(spec.option) && !spec.defaultValue.isEmpty())
+            originals.insert(spec.option, spec.defaultValue);
+    }
+    const QStringList zones = zoneNames();
+    for (Config::FieldSpec &spec : specs) {
+        switch (spec.kind) {
+        case Config::FieldKind::InterfaceRef: {
+            spec.choices = m_interfaceNames;
+            const QString current = section->option(spec.option);
+            if (!current.isEmpty() && !spec.choices.contains(current))
+                spec.choices.prepend(current);
+            break;
+        }
+        case Config::FieldKind::ZoneRef: {
+            spec.choices = zones;
+            const QString current = section->option(spec.option);
+            if (!current.isEmpty() && !spec.choices.contains(current))
+                spec.choices.prepend(current);
+            break;
+        }
+        case Config::FieldKind::Chain:
+            originals.insert(spec.option, chainFor(*section));
+            break;
+        default:
+            break;
+        }
+    }
+    m_fields.setRows(specs, originals, m_staged.value(m_section));
+}
+
+// Zone names the loaded package itself declares; "*" is fw4's any-zone.
+QStringList ConfigEditor::zoneNames() const
+{
+    QStringList names{QStringLiteral("*")};
+    for (const Ubus::UciSection &section : m_config.sections) {
+        if (section.type != QLatin1String("zone"))
+            continue;
+        const QString name = section.option(QStringLiteral("name"));
+        if (!name.isEmpty() && !names.contains(name))
+            names.append(name);
+    }
+    return names;
+}
+
+// fw4 derives the chain from src/dest on a rule (fw4.uc, parse_rule); there is
+// no chain option to store, so the editor computes the WinBox row.
+QString ConfigEditor::chainFor(const Ubus::UciSection &section) const
+{
+    const bool hasSrc = section.hasOption(QStringLiteral("src"));
+    const bool hasDest = section.hasOption(QStringLiteral("dest"));
+    if (hasSrc)
+        return hasDest ? QStringLiteral("forward") : QStringLiteral("input");
+    return QStringLiteral("output");
+}
+
+void ConfigEditor::onInterfacesReceived(const QList<Ubus::InterfaceInfo> &interfaces)
+{
+    QStringList names;
+    for (const Ubus::InterfaceInfo &info : interfaces) {
+        if (!info.name.isEmpty())
+            names.append(info.name);
+        if (!info.device.isEmpty())
+            names.append(info.device);
+        if (!info.l3Device.isEmpty())
+            names.append(info.l3Device);
+    }
+    names.removeDuplicates();
+    names.sort(Qt::CaseInsensitive);
+    if (names == m_interfaceNames)
+        return;
+    m_interfaceNames = names;
+    rebuildFields();
 }
 
 void ConfigEditor::rebuildPending()
@@ -231,7 +370,7 @@ void ConfigEditor::rebuildPending()
         if (!section)
             continue;
         for (auto optionIt = sectionIt->constBegin(); optionIt != sectionIt->constEnd(); ++optionIt) {
-            const QString committed = section->option(optionIt.key());
+            const QString committed = effectiveValue(*section, optionIt.key());
             if (committed == *optionIt)
                 continue;
             m_pending.append({m_spec.config, sectionIt.key(), optionIt.key(), committed, *optionIt});

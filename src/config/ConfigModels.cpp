@@ -16,6 +16,12 @@ QString kindName(Config::FieldKind kind)
         return QStringLiteral("boolean");
     case Config::FieldKind::Choice:
         return QStringLiteral("choice");
+    case Config::FieldKind::InterfaceRef:
+        return QStringLiteral("interface-ref");
+    case Config::FieldKind::ZoneRef:
+        return QStringLiteral("zone-ref");
+    case Config::FieldKind::Chain:
+        return QStringLiteral("chain");
     case Config::FieldKind::Text:
         break;
     }
@@ -104,11 +110,12 @@ QHash<int, QByteArray> ConfigSectionsModel::roleNames() const
 }
 
 void ConfigSectionsModel::setSections(const QList<Ubus::UciSection> &sections,
-                                      const QStringList &summaryOptions)
+                                      const Config::DomainSpec &spec)
 {
     beginResetModel();
     m_rows.clear();
     for (const Ubus::UciSection &section : sections) {
+        const QStringList summaryOptions = spec.summaryOptionsFor(section.type);
         QStringList parts;
         for (const QString &option : summaryOptions) {
             const QString value = section.option(option);

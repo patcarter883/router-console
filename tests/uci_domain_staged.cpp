@@ -386,6 +386,16 @@ int main(int argc, char *argv[])
             out << "    " << checkedFields << " field(s) all present in the package" << Qt::endl;
         }
 
+        // A domain may enumerate several section types (firewall: zone, rule,
+        // redirect); the editor shows all of them, the registry check above
+        // only covers the primary type.
+        int expectedEditorSections = entry.sections;
+        if (!spec->sections.isEmpty()) {
+            expectedEditorSections = 0;
+            for (const QString &type : spec->sectionTypes())
+                expectedEditorSections += probe.config(spec->config, type).sections.size();
+        }
+
         editor->reload();
         if (!waitFor([&] { return editor->isLoaded() && !editor->isBusy(); }, 12000)) {
             probe.stop();
@@ -396,13 +406,46 @@ int main(int argc, char *argv[])
             probe.stop();
             return fail(id, "read", editor->errorText());
         }
-        if (editor->sections()->rowCount() != entry.sections) {
+        if (editor->sections()->rowCount() != expectedEditorSections) {
             probe.stop();
             return fail(id, "read", QStringLiteral("editor shows %1 section(s), expected %2")
                                        .arg(editor->sections()->rowCount())
-                                       .arg(entry.sections));
+                                       .arg(expectedEditorSections));
         }
         out << "    editor loaded: " << editor->statusText() << Qt::endl;
+
+        if (id == QLatin1String("dhcp")) {
+            // The interface field is a registry-level InterfaceRef: its choices
+            // come from network.interface.dump, not from a hand-written list.
+            auto *fields = qobject_cast<ConfigFieldsModel *>(editor->fields());
+            auto choicesFor = [fields](const QString &option) {
+                QStringList values;
+                if (!fields)
+                    return values;
+                for (int row = 0; row < fields->rowCount(); ++row) {
+                    const QModelIndex index = fields->index(row, 0);
+                    if (fields->data(index, ConfigFieldsModel::OptionRole).toString() == option)
+                        return fields->data(index, ConfigFieldsModel::ChoicesRole).toStringList();
+                }
+                return values;
+            };
+            const bool named = waitFor(
+                [&] {
+                    const QStringList choices = choicesFor(QStringLiteral("interface"));
+                    return choices.contains(QStringLiteral("lan"))
+                           && choices.contains(QStringLiteral("wan"))
+                           && choices.contains(QStringLiteral("wan6"));
+                },
+                8000);
+            if (!named) {
+                probe.stop();
+                return fail(id, "interface-ref",
+                            QStringLiteral("interface choices from network.interface.dump: %1")
+                                .arg(choicesFor(QStringLiteral("interface")).join(QStringLiteral(", "))));
+            }
+            out << "    interface choices: "
+                << choicesFor(QStringLiteral("interface")).join(QStringLiteral(", ")) << Qt::endl;
+        }
 
         if (entry.absentPackage) {
             // Absent package: the editor loads it, shows nothing, and staging

@@ -209,7 +209,7 @@ staged-changes list are generic over it. Six domains, in registry order:
 | system | system | system | 1 (anonymous) | hostname, timezone, zonename, log_size |
 | network | network | interface | 5 (loopback, lan, wan, wan6, lan2) | device, proto, ipaddr, ip6assign |
 | wireless | wireless | wifi-iface | **0 — package absent** | device, mode, ssid, network, encryption, key |
-| firewall | firewall | zone | 2 (cfg02dc81 = lan, cfg03dc81 = wan) | name, input, output, forward, masq, mtu_fix |
+| firewall | firewall | zone + rule + redirect | 2 zones (cfg02dc81 = lan, cfg03dc81 = wan) + 9 rules + 0 redirects | zone: name, network, input, output, forward, masq, mtu_fix; rule: name, enabled, chain (derived), target, proto, src, dest, src_ip, dest_ip, src_port, dest_port, icmp_type, family, limit; redirect: name, enabled, target, proto, src, dest, src_dport, dest_ip, dest_port, src_ip, src_port, family, reflection |
 | dhcp | dhcp | dhcp | 2 (lan, wan) | interface, start, limit, leasetime, dhcpv4, dhcpv6, ra, ignore |
 
 Section counts and option names are what the VM actually stores (network,
@@ -218,10 +218,20 @@ SQM choice lists from `/var/run/sqm/available_qdiscs` and `/usr/lib/sqm/*.qos`).
 
 `tests/uci_domain_staged.cpp` enforces that: it reads each package
 independently and fails if the section count differs or if any registry field
-names an option the package does not hold. Options reachable only through a
-different section type stay out of the registry — the network domain edits
-`config interface`, not `config device`, and the firewall domain edits
-`config zone`, not `config rule`.
+names an option the package does not hold. A domain may enumerate several
+section types — the firewall domain reads `zone`, `rule` and `redirect` and
+picks the field set from the selected section's type. The registry check above
+covers the primary type; the rule and redirect fields are the ones fw4's own
+`parse_rule`/`parse_redirect` accept (`/usr/share/ucode/fw4.uc`). fw4 has no
+`chain` option: it derives input/forward/output from `src`/`dest`, so the
+WinBox-style chain row is computed and read-only.
+
+**Field kinds beyond text/choice.** `FieldKind::InterfaceRef` fills its choices
+from live `network.interface.dump` names and their devices, and stays editable
+so a value outside the list can still be typed (DHCP and SQM `interface`, the
+network `device`, the firewall zone interface list). `FieldKind::ZoneRef` fills
+its choices from the zone names the loaded firewall package itself declares.
+`FieldKind::Chain` is the derived read-only WinBox row above.
 
 **Wireless on the dev VM.** There is no `wireless` package and no
 `/etc/config/wireless` on the VM (`ubus call uci configs` does not list it; `uci
@@ -236,10 +246,11 @@ the one set in this table not observed on the VM, and the test skips the
 option-presence check for an absent package instead of pretending to verify it.
 
 **List-valued options.** `uci get` answers a repeated option (`list ipaddr`,
-`list network`, `list ra_flags`) as a JSON array, and the decoder keeps scalars
-only, so such a value renders empty in the editor. None of the editable fields
-above is list-only on the VM; `firewall.zone.network` and `dhcp.ra_flags` are
-deliberately not in the registry.
+`list network`, `list icmp_type`) as a JSON array; the decoder joins the
+elements with spaces, which is also what `uci get` prints, so the editor renders
+`lan lan2` rather than an empty row. On apply the editor splits that value and
+sends the array form, so `list network` round-trips as a list; `firewall.zone.network`
+and the rules' `icmp_type`/address/port lists are editable.
 
 ## Tool tier
 
@@ -275,13 +286,13 @@ declares which in its manifest (docs/plugins.md):
 | modemaim | `modemaim status` | `ts,state,pstate,plmn,operator,tech,mapped{site,conf,source},rssi,rsrp,rsrq,sinr,serving{pci,earfcn,rsrp,rsrq,ta,ta_us,eci},neighbors[],atNeighbors[]` |
 | modemaim | `modemaim origin` | `{"lat":...,"lon":...,"confirmed":...}` |
 | modemaim | `GET /luci-static/resources/modemaim/towers.json` | `{source,generated,data_date,bbox,towers[{site,lat,lon,band,mhz,bw,eirp,h,azs,hbw,carrier}]}` — static by design: over the 1 MiB ubus cap rpcd drops the whole object |
-| nettime | `nettime status` | `{ts,enabled,port,clock,provider,uptime,clients}` — **mock**: the packaged app exposes only the UDP 5637 GstNetTime provider, no rpcd object |
+| nettime | `nettime status` (the client's shim) | `{ts,enabled,port,clock,provider,uptime,clients}` — **mock**: the packaged app exposes only the UDP 5637 GstNetTime provider, no rpcd object |
 
 The LuCI apps are not installed in the VM (no OpenWrt SDK build in this
 milestone); `scripts/vm-mock-apps.sh` installs a mock rpcd script for modemaim
 and nettime, a procd stand-in + `/etc/config/rist2rist` for rist2rist, and a
 small tower extract with the real schema. modemaim's mock answers the real
-script's keys verbatim; nettime's does not correspond to any shipped method.
+script's keys verbatim; the nettime one does not correspond to any shipped method.
 
 The plugin surfaces ship as their own rpcd ACL group (`scripts/plugins.acl.json`,
 installed as `/usr/share/rpcd/acl.d/router-console-plugins.json`): `service list`,

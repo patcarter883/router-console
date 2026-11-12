@@ -57,7 +57,7 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
-    void setSections(const QList<Ubus::UciSection> &sections, const QStringList &summaryOptions);
+    void setSections(const QList<Ubus::UciSection> &sections, const Config::DomainSpec &spec);
     Q_INVOKABLE int rowFor(const QString &name) const;
 
 private:

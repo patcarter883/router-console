@@ -1,6 +1,6 @@
 {
 	"router-console-plugins": {
-		"description": "router-console plugin views: procd service state, custom app rpcd surfaces, and the UCI packages the views read",
+		"description": "router-console plugin views: procd service state, custom app rpcd surfaces, and the UCI packages the views read. @NETTIME_ROUTER_OBJECT@ is filled in at install time by scripts/vm-mock-apps.sh from scripts/nettime-routerside.sh.",
 		"read": {
 			"ubus": {
 				"service": [ "list" ],

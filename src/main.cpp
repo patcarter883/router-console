@@ -30,13 +30,15 @@ int main(int argc, char *argv[])
     const QCommandLineOption configOption("open-config",
                                           "open the config editor for this domain on connect",
                                           "domain");
+    const QCommandLineOption configSectionOption(
+        "config-section", "select this UCI section in the opened config editor", "name");
     const QCommandLineOption stageOption("stage", "stage option=value in the opened config editor",
                                          "option=value");
     const QCommandLineOption pluginOption("open-plugin",
                                           "open the plugin view for this plugin id on connect",
                                           "id");
     parser.addOptions({hostOption, userOption, passwordOption, trustOption, interfaceOption,
-                       configOption, stageOption, pluginOption});
+                       configOption, configSectionOption, stageOption, pluginOption});
     const QCommandLineOption toolOption("open-tool",
                                         "open this tool window on connect (ping, traceroute, "
                                         "portscan, torch, files, sqm)",
@@ -58,6 +60,8 @@ int main(int argc, char *argv[])
     QQmlApplicationEngine qml;
     qml.rootContext()->setContextProperty("startupInterfaceName", parser.value(interfaceOption));
     qml.rootContext()->setContextProperty("startupConfigDomain", parser.value(configOption));
+    qml.rootContext()->setContextProperty("startupConfigSection",
+                                          parser.value(configSectionOption));
     qml.rootContext()->setContextProperty("startupStageValue", parser.value(stageOption));
     qml.rootContext()->setContextProperty("startupPluginId", parser.value(pluginOption));
     qml.rootContext()->setContextProperty("startupToolId", parser.value(toolOption));
