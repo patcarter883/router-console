@@ -107,6 +107,7 @@ void TrafficHistory::compact(Series &series, qint64 nowMs)
 
 qint64 TrafficHistory::bucketWidthFor(qint64 windowMs, int targetPoints)
 {
+    // Multiples of the coarse tier's 10 s so merged buckets never straddle a slot.
     static const qint64 ladder[] = {1000,   2000,   5000,    10000,   20000,
                                     30000,  60000,  120000,  300000,  600000,
                                     1800000};

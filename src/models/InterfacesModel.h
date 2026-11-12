@@ -68,10 +68,10 @@ public:
                                       qint64 bucketMs) const;
     Q_INVOKABLE void clearHistory();
 
-    // Canvas paint cost per bucket width, reported from TrafficGraph.qml on a
-    // timer (the paint itself runs on the render thread). Only printed when
-    // RC_PAINT_STATS is set, which is how docs/traffic-history.md gets its
-    // numbers.
+    // Canvas paint cost per bucket width. TrafficGraph.qml reports the average
+    // it accumulated; the paint callback itself runs on the render thread, so the
+    // report comes from the GUI thread. Printed only when RC_PAINT_STATS is set,
+    // which is how docs/traffic-history.md gets its numbers.
     Q_INVOKABLE void reportGraphPaint(int bucketMs, int points, double averageMs, int paints);
 
     // Typed store the tests read directly.

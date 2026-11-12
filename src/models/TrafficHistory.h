@@ -46,7 +46,10 @@ public:
     static constexpr qint64 recentSpanMs = 10 * 60 * 1000;
     static constexpr qint64 coarseBucketMs = 10 * 1000;
     static constexpr qint64 retentionMs = 24LL * 60 * 60 * 1000;
-    static constexpr int maxPoints = 600;
+    // Ceiling for a drawn trace. The paint callback is dominated by fixed work
+    // (0.60 ms for 601 slots, 0.64 ms for 1 441), so the cap is where 24 h at
+    // 1 minute resolution lands rather than where the renderer gives up.
+    static constexpr int maxPoints = 1500;
 
     void append(const QString &ifName, qint64 atMs, double rxBytesPerSec, double txBytesPerSec);
     void clear();

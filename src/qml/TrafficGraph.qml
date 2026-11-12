@@ -6,7 +6,7 @@ import QtQuick
 // RX/TX line graph over a stored history window. The series are one value per
 // grid slot (`bucketMs` wide, slot i centred at gridStartMs + i*bucketMs), a
 // negative value marks a slot with no measurement and breaks the line. Drawing
-// is linear in the slot count, which the range selector caps at 600.
+// is linear in the slot count, which the range selector caps at 1500.
 Item {
     id: graph
 

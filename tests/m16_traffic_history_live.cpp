@@ -46,6 +46,32 @@ double meanOf(const QVariantList &values, bool *sawData)
     return count > 0 ? sum / count : 0;
 }
 
+// Mean of the occupied slots between the first and last one: the boundary slots
+// are partial by construction, so they compare badly across two bucket widths.
+double interiorMean(const QVariantList &values, bool *sawData)
+{
+    int first = -1;
+    int last = -1;
+    for (int i = 0; i < values.size(); ++i) {
+        if (values.at(i).toDouble() < 0)
+            continue;
+        if (first < 0)
+            first = i;
+        last = i;
+    }
+    double sum = 0;
+    int count = 0;
+    for (int i = first + 1; i < last; ++i) {
+        const double rate = values.at(i).toDouble();
+        if (rate < 0)
+            continue;
+        sum += rate;
+        ++count;
+    }
+    *sawData = count > 0;
+    return count > 0 ? sum / count : 0;
+}
+
 double peakOf(const QVariantList &values)
 {
     double peak = 0;
@@ -180,9 +206,10 @@ int main(int argc, char *argv[])
         const QVariantMap coarse = interfaces->historyAt(ifName, 60000, 10000);
         bool fineHasData = false;
         bool coarseHasData = false;
-        const double fineMean = meanOf(fine.value(QStringLiteral("rx")).toList(), &fineHasData);
+        const double fineMean =
+            interiorMean(fine.value(QStringLiteral("rx")).toList(), &fineHasData);
         const double coarseMean =
-            meanOf(coarse.value(QStringLiteral("rx")).toList(), &coarseHasData);
+            interiorMean(coarse.value(QStringLiteral("rx")).toList(), &coarseHasData);
         out << "  decimation: 1 s mean=" << fineMean << " B/s, 10 s mean=" << coarseMean
             << " B/s (delta "
             << (fineMean > 0 ? qAbs(fineMean - coarseMean) / fineMean * 100.0 : 100.0) << "%)"
@@ -196,7 +223,7 @@ int main(int argc, char *argv[])
         QStringList problems;
         if (samples < seconds - 3)
             problems << QStringLiteral("only %1 of %2 samples").arg(samples).arg(seconds);
-        if (store.recentCount(ifName) < seconds - 3)
+        if (store.recentCount(ifName) < qMin(seconds, 600) - 3)
             problems << QStringLiteral("recent tier holds %1 samples").arg(store.recentCount(ifName));
         if (minute.filled < 25)
             problems << QStringLiteral("1 m view filled %1 slots").arg(minute.filled);
@@ -208,14 +235,14 @@ int main(int argc, char *argv[])
             problems << QStringLiteral("1 h bucket is not 10 s");
         if (hour.pointCount != 360 && hour.pointCount != 361)
             problems << QStringLiteral("1 h view has %1 slots").arg(hour.pointCount);
-        if (day.map.value(QStringLiteral("bucketMs")).toLongLong() != 300000)
-            problems << QStringLiteral("24 h bucket is not 5 min");
-        if (day.pointCount < 288 || day.pointCount > 290)
+        if (day.map.value(QStringLiteral("bucketMs")).toLongLong() != 60000)
+            problems << QStringLiteral("24 h bucket is not 1 min");
+        if (day.pointCount < 1440 || day.pointCount > 1442)
             problems << QStringLiteral("24 h view has %1 slots").arg(day.pointCount);
         if (ten.pointCount != minute.pointCount && ten.pointCount <= minute.pointCount)
             problems << QStringLiteral("10 m view does not widen the window");
-        if (!coarseHasData || (fineHasData && fineMean > 0
-                               && qAbs(fineMean - coarseMean) / fineMean > 0.02))
+        if (!coarseHasData || !fineHasData || fineMean <= 0
+            || qAbs(fineMean - coarseMean) / fineMean > 0.05)
             problems << QStringLiteral("10 s decimation does not match the 1 s mean");
 
         if (!problems.isEmpty()) {

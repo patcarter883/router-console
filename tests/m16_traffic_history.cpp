@@ -214,7 +214,7 @@ int main(int argc, char **argv)
         const struct {
             qint64 windowMs;
             qint64 expected;
-        } cases[] = {{60000, 1000}, {600000, 1000}, {3600000, 10000}, {86400000, 300000}};
+        } cases[] = {{60000, 1000}, {600000, 1000}, {3600000, 10000}, {86400000, 60000}};
         for (const auto &item : cases) {
             const qint64 width = TrafficHistory::bucketWidthFor(item.windowMs);
             const qint64 points = (item.windowMs + width - 1) / width + 1;
