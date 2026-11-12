@@ -4,6 +4,7 @@
 #include "UbusClient.h"
 
 #include "ToolCodec.h"
+#include "FrrCodec.h"
 #include "UciCodec.h"
 
 #include <QCryptographicHash>
@@ -21,10 +22,17 @@
 
 namespace UciCodec = Ubus::UciCodec;
 namespace ToolCodec = Ubus::ToolCodec;
+namespace FrrCodec = Ubus::FrrCodec;
 
 namespace {
 
 constexpr const char *kAnonymousSession = "00000000000000000000000000000000";
+// Routing surface paths (docs/frr-routing.md): OpenWrt ships FRR's binaries in
+// /usr/sbin, vtysh in /usr/bin and one config file in /etc/frr.
+constexpr const char *kVtysh = "/usr/bin/vtysh";
+constexpr const char *kFrrDaemons = "/etc/frr/daemons";
+constexpr const char *kFrrRestartLog = "/tmp/frr-restart.log";
+constexpr const char *kSh = "/bin/sh";
 
 Ubus::Status statusFromCode(int code)
 {
@@ -150,6 +158,11 @@ UbusClient::UbusClient(QObject *parent)
     qRegisterMetaType<Ubus::FileListing>();
     qRegisterMetaType<Ubus::SysupgradeCheck>();
     qRegisterMetaType<Ubus::ExecResult>();
+    qRegisterMetaType<Routing::RouteTable>();
+    qRegisterMetaType<Routing::Daemons>();
+    qRegisterMetaType<Routing::OspfStatus>();
+    qRegisterMetaType<Routing::BgpSummary>();
+    qRegisterMetaType<Routing::FrrApplyResult>();
 }
 
 void UbusClient::login(const QUrl &endpoint, const QString &username, const QString &password)
@@ -654,6 +667,262 @@ void UbusClient::packageInstall(const QStringList &packages)
                  return;
              }
              emit packageInstallFinished(ToolCodec::parseExec(QStringLiteral("/usr/bin/apk"), result));
+         });
+}
+
+void UbusClient::fetchRoutingDaemons()
+{
+    // /etc/frr/daemons is the enable list; `show daemons` is what actually runs.
+    // A missing daemons file means the frr package is not installed.
+    call(QStringLiteral("file"), QStringLiteral("read"), ToolCodec::fileReadArgs(kFrrDaemons),
+         [this](const QJsonObject &result, const Ubus::Error &error) {
+             const QString daemonsFile =
+                 error.isOk()
+                     ? QString::fromUtf8(ToolCodec::parseFileData(result, true))
+                     : QString();
+             call(QStringLiteral("file"), QStringLiteral("exec"),
+                  ToolCodec::execArgs(kVtysh, {QStringLiteral("-c"), QStringLiteral("show daemons")}),
+                  [this, daemonsFile](const QJsonObject &show, const Ubus::Error &showError) {
+                      emit routingDaemonsReceived(FrrCodec::parseDaemons(
+                          showError.isOk() ? show.value(QStringLiteral("stdout")).toString()
+                                           : QString(),
+                          daemonsFile));
+                  });
+         });
+}
+
+void UbusClient::fetchRoutes()
+{
+    // IPv4 and IPv6 both come from vtysh JSON; `ip -6 route` adds the kernel
+    // entries FRR does not carry (unreachable/prohibit and pre-FRR routes).
+    call(QStringLiteral("file"), QStringLiteral("exec"),
+         ToolCodec::execArgs(kVtysh, {QStringLiteral("-c"), QStringLiteral("show ip route json")}),
+         [this](const QJsonObject &v4Result, const Ubus::Error &v4Error) {
+             if (!v4Error.isOk()) {
+                 emit routingFailed(v4Error);
+                 return;
+             }
+             QList<Routing::RouteEntry> routes = FrrCodec::parseRoutes(
+                 v4Result.value(QStringLiteral("stdout")).toString(), QStringLiteral("ipv4"));
+
+             call(QStringLiteral("file"), QStringLiteral("exec"),
+                  ToolCodec::execArgs(kVtysh,
+                                      {QStringLiteral("-c"), QStringLiteral("show ipv6 route json")}),
+                  [this, routes](const QJsonObject &v6Result,
+                                 const Ubus::Error &v6Error) mutable {
+                      if (v6Error.isOk()) {
+                          const QList<Routing::RouteEntry> v6 = FrrCodec::parseRoutes(
+                              v6Result.value(QStringLiteral("stdout")).toString(),
+                              QStringLiteral("ipv6"));
+                          routes.append(v6);
+                      }
+                      call(QStringLiteral("file"), QStringLiteral("exec"),
+                           ToolCodec::execArgs(QStringLiteral("/sbin/ip"),
+                                               {QStringLiteral("-6"), QStringLiteral("route")}),
+                           [this, routes](const QJsonObject &kernelResult,
+                                          const Ubus::Error &kernelError) mutable {
+                               if (kernelError.isOk()) {
+                                   routes = FrrCodec::mergeKernelRoutes(
+                                       routes,
+                                       FrrCodec::parseKernelRoutes6(
+                                           kernelResult.value(QStringLiteral("stdout")).toString()));
+                               }
+                               Routing::RouteTable table;
+                               table.routes = routes;
+                               emit routesReceived(table);
+                           });
+                  });
+         });
+}
+
+void UbusClient::fetchOspfStatus()
+{
+    call(QStringLiteral("file"), QStringLiteral("exec"),
+         ToolCodec::execArgs(
+             kVtysh, {QStringLiteral("-c"), QStringLiteral("show ip ospf neighbor json")}),
+         [this](const QJsonObject &neighborResult, const Ubus::Error &neighborError) {
+             if (!neighborError.isOk()) {
+                 emit routingFailed(neighborError);
+                 return;
+             }
+             Routing::OspfStatus status;
+             status.neighbors = FrrCodec::parseOspfNeighbors(
+                 neighborResult.value(QStringLiteral("stdout")).toString());
+
+             call(QStringLiteral("file"), QStringLiteral("exec"),
+                  ToolCodec::execArgs(
+                      kVtysh,
+                      {QStringLiteral("-c"), QStringLiteral("show ip ospf interface json")}),
+                  [this, status](const QJsonObject &interfaceResult,
+                                 const Ubus::Error &interfaceError) mutable {
+                      if (interfaceError.isOk()) {
+                          status.interfaces = FrrCodec::parseOspfInterfaces(
+                              interfaceResult.value(QStringLiteral("stdout")).toString());
+                      }
+                      call(QStringLiteral("file"), QStringLiteral("exec"),
+                           ToolCodec::execArgs(
+                               kVtysh,
+                               {QStringLiteral("-c"), QStringLiteral("show ip ospf database")}),
+                           [this, status](const QJsonObject &databaseResult,
+                                          const Ubus::Error &databaseError) mutable {
+                               if (databaseError.isOk()) {
+                                   status = FrrCodec::parseOspfDatabase(
+                                       databaseResult.value(QStringLiteral("stdout")).toString(),
+                                       status);
+                               }
+                               if (status.routerId.isEmpty()) {
+                                   for (const Routing::OspfInterface &interface : status.interfaces) {
+                                       if (!interface.routerId.isEmpty()) {
+                                           status.routerId = interface.routerId;
+                                           break;
+                                       }
+                                   }
+                               }
+                               emit ospfStatusReceived(status);
+                           });
+                  });
+         });
+}
+
+void UbusClient::fetchBgpStatus()
+{
+    call(QStringLiteral("file"), QStringLiteral("exec"),
+         ToolCodec::execArgs(kVtysh, {QStringLiteral("-c"), QStringLiteral("show bgp summary json")}),
+         [this](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit routingFailed(error);
+                 return;
+             }
+             emit bgpStatusReceived(
+                 FrrCodec::parseBgpSummary(result.value(QStringLiteral("stdout")).toString()));
+         });
+}
+
+void UbusClient::frrReadConfig(const QString &path)
+{
+    call(QStringLiteral("file"), QStringLiteral("read"), ToolCodec::fileReadArgs(path),
+         [this, path](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit frrConfigFailed(error);
+                 return;
+             }
+             emit frrConfigReceived(path,
+                                    QString::fromUtf8(ToolCodec::parseFileData(result, true)));
+         });
+}
+
+void UbusClient::frrApplyConfig(const QString &path, const QByteArray &text,
+                                const QByteArray &backupText)
+{
+    auto writeConfig = [this, path, text] {
+        emit frrApplyProgress(QStringLiteral("writing config"));
+        call(QStringLiteral("file"), QStringLiteral("write"), ToolCodec::fileWriteArgs(path, text),
+             [this, path](const QJsonObject &, const Ubus::Error &error) {
+                 if (!error.isOk()) {
+                     emit frrApplyFailed(error);
+                     return;
+                 }
+                 frrRestartAndProbe(path);
+             });
+    };
+
+    if (backupText.isEmpty()) {
+        writeConfig();
+        return;
+    }
+
+    emit frrApplyProgress(QStringLiteral("saving backup"));
+    call(QStringLiteral("file"), QStringLiteral("write"),
+         ToolCodec::fileWriteArgs(path + QStringLiteral(".bak"), backupText),
+         [this, writeConfig](const QJsonObject &, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit frrApplyFailed(error);
+                 return;
+             }
+             writeConfig();
+         });
+}
+
+void UbusClient::frrRestoreBackup(const QString &path)
+{
+    emit frrApplyProgress(QStringLiteral("reading backup"));
+    call(QStringLiteral("file"), QStringLiteral("read"),
+         ToolCodec::fileReadArgs(path + QStringLiteral(".bak")),
+         [this, path](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 emit frrApplyFailed(error);
+                 return;
+             }
+             const QByteArray backup = ToolCodec::parseFileData(result, true);
+             call(QStringLiteral("file"), QStringLiteral("write"),
+                  ToolCodec::fileWriteArgs(path, backup),
+                  [this, path](const QJsonObject &, const Ubus::Error &writeError) {
+                      if (!writeError.isOk()) {
+                          emit frrApplyFailed(writeError);
+                          return;
+                      }
+                      frrRestartAndProbe(path);
+                  });
+         });
+}
+
+void UbusClient::frrRestartAndProbe(const QString &path)
+{
+    // /etc/init.d/frr restart is the only apply primitive: OpenWrt's FRR has no
+    // UCI apply/confirm, so success means "file written, frr restarted, zebra
+    // and the configured daemons are up, and the restart did not report a
+    // config-processing failure". The daemons inherit the init script's stdout,
+    // so the restart runs through a shell that redirects to a file: rpcd's
+    // exec waits for the pipe to close and would otherwise time out.
+    emit frrApplyProgress(QStringLiteral("restarting frr"));
+    call(QStringLiteral("file"), QStringLiteral("exec"),
+         ToolCodec::execArgs(kSh,
+                             {QStringLiteral("-c"),
+                              QStringLiteral("/etc/init.d/frr restart > %1 2>&1; echo $?")
+                                  .arg(kFrrRestartLog)}),
+         [this, path](const QJsonObject &restart, const Ubus::Error &error) {
+             Routing::FrrApplyResult apply;
+             apply.restartCode =
+                 error.isOk() ? restart.value(QStringLiteral("stdout")).toString().trimmed().toInt()
+                              : -1;
+
+             auto probe = [this, path, apply](Routing::FrrApplyResult result) mutable {
+                 call(QStringLiteral("file"), QStringLiteral("exec"),
+                      ToolCodec::execArgs(kVtysh,
+                                          {QStringLiteral("-c"), QStringLiteral("show daemons")}),
+                      [this, path, result](const QJsonObject &show,
+                                           const Ubus::Error &showError) mutable {
+                          if (showError.isOk()) {
+                              const QString stdoutText =
+                                  show.value(QStringLiteral("stdout")).toString();
+                              for (const QString &daemon :
+                                   stdoutText.split(QLatin1Char(' '), Qt::SkipEmptyParts)) {
+                                  result.runningDaemons.append(daemon.trimmed());
+                              }
+                          }
+                          const bool configRejected =
+                              result.restartOutput.contains(QStringLiteral("processing failure"))
+                              || result.restartOutput.contains(
+                                  QStringLiteral("Failure to communicate"));
+                          result.ok = result.restartCode == 0 && !configRejected
+                                      && result.runningDaemons.contains(QStringLiteral("zebra"));
+                          emit frrApplied(path, result);
+                      });
+             };
+
+             if (!error.isOk()) {
+                 apply.restartOutput = error.message;
+                 probe(apply);
+                 return;
+             }
+             call(QStringLiteral("file"), QStringLiteral("read"),
+                  ToolCodec::fileReadArgs(kFrrRestartLog),
+                  [probe, apply](const QJsonObject &log, const Ubus::Error &logError) mutable {
+                      if (logError.isOk())
+                          apply.restartOutput =
+                              QString::fromUtf8(ToolCodec::parseFileData(log, true)).trimmed();
+                      probe(apply);
+                  });
          });
 }
 

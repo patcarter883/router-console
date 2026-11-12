@@ -13,6 +13,7 @@
 #include <functional>
 
 #include "ToolTypes.h"
+#include "RoutingTypes.h"
 #include "UbusTypes.h"
 
 class QNetworkAccessManager;
@@ -75,6 +76,18 @@ public slots:
     void sysupgradeStart();
     void packageInstall(const QStringList &packages);
 
+    // Routing (docs/frr-routing.md): daemon state, the kernel routing table via
+    // vtysh, OSPF/BGP status, and the frr.conf document the config editor
+    // stages. Apply = back up the file, write it, restart frr, probe the
+    // daemons; FRR has no UCI-style apply/confirm.
+    void fetchRoutingDaemons();
+    void fetchRoutes();
+    void fetchOspfStatus();
+    void fetchBgpStatus();
+    void frrReadConfig(const QString &path);
+    void frrApplyConfig(const QString &path, const QByteArray &text, const QByteArray &backupText);
+    void frrRestoreBackup(const QString &path);
+
 
 signals:
     void loggedIn(const Ubus::Session &session);
@@ -132,8 +145,22 @@ signals:
     void packageInstallFinished(const Ubus::ExecResult &result);
     void packageInstallFailed(const Ubus::Error &error);
 
+    void routingDaemonsReceived(const Routing::Daemons &daemons);
+    void routesReceived(const Routing::RouteTable &table);
+    void routingFailed(const Ubus::Error &error);
+    void ospfStatusReceived(const Routing::OspfStatus &status);
+    void bgpStatusReceived(const Routing::BgpSummary &summary);
+    void frrConfigReceived(const QString &path, const QString &text);
+    void frrConfigFailed(const Ubus::Error &error);
+    void frrApplyProgress(const QString &stage);
+    void frrApplied(const QString &path, const Routing::FrrApplyResult &result);
+    void frrApplyFailed(const Ubus::Error &error);
+
 private:
     using ResultHandler = std::function<void(const QJsonObject &result, const Ubus::Error &error)>;
+
+    // Apply chain shared by frrApplyConfig and frrRestoreBackup.
+    void frrRestartAndProbe(const QString &path);
 
     void call(const QString &object, const QString &method, const QJsonObject &args,
               ResultHandler handler, bool allowRelogin = true);

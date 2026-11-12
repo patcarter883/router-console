@@ -1,6 +1,6 @@
 {
 	"router-console": {
-		"description": "router-console native client: staged UCI editing across the core config domains, plus the tool tier (exec, files, sysupgrade test, conntrack, qdisc stats)",
+		"description": "router-console native client: staged UCI editing across the core config domains, staged frr.conf editing with the routing protocol windows, plus the tool tier (exec, files, sysupgrade test, conntrack, qdisc stats)",
 		"read": {
 			"file": {
 				"/": [ "list" ],
@@ -13,7 +13,10 @@
 				"/bin/traceroute": [ "exec" ],
 				"/bin/cat": [ "exec" ],
 				"/sbin/tc": [ "exec" ],
-				"/bin/sh": [ "exec" ]
+				"/bin/sh": [ "exec" ],
+				"/usr/bin/vtysh": [ "exec" ],
+				"/sbin/ip": [ "exec" ],
+				"/usr/libexec/ip-tiny": [ "exec" ]
 			},
 			"ubus": {
 				"uci": [ "get", "state", "changes" ],
@@ -27,6 +30,8 @@
 			"file": {
 				"/tmp/**": [ "write", "remove" ],
 				"/etc/config/**": [ "write", "remove" ],
+				"/etc/frr/**": [ "write", "remove" ],
+				"/etc/init.d/frr": [ "exec" ],
 				"/usr/bin/apk": [ "exec" ]
 			},
 			"ubus": {

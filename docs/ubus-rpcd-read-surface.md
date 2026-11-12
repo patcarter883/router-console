@@ -269,6 +269,31 @@ and the rules' `icmp_type`/address/port lists are editable.
   output via rpcd file/exec (`/usr/libexec/sqm` helpers run as root) and parse.
   cake_mq-aware: iterate all cake instances when backported kernels land.
 
+## Routing (FRR): status windows and the frr.conf editor
+
+Measured on FRR 10.4.1 from the 25.12.6 feed (docs/frr-routing.md has the full
+inventory). All reads are rpcd `file.exec` of vtysh:
+
+| window | call | answer |
+| --- | --- | --- |
+| Routes | `/usr/bin/vtysh -c "show ip route json"` + `"show ipv6 route json"` | prefix → array of {protocol, distance, metric, selected, installed, uptime, nexthops[]} |
+| Routes | `/sbin/ip -6 route` | kernel IPv6 routes FRR does not carry (unreachable/blackhole) |
+| OSPF | `vtysh -c "show ip ospf neighbor json"` | neighbors → `{"<router-id>":[{nbrState,upTime,deadTime,ifaceAddress,ifaceName}]}` |
+| OSPF | `vtysh -c "show ip ospf interface json"` | interface → {area, cost, state, priority, nbrCount, nbrAdjacentCount, ipAddress} |
+| OSPF | `vtysh -c "show ip ospf database"` | text: per-area LSA blocks, counted |
+| BGP | `vtysh -c "show bgp summary json"` | `ipv4Unicast` → {routerId, as, ribCount, peers{addr:{remoteAs,state,pfxRcd,pfxSnt,...}}} |
+| daemons | `vtysh -c "show daemons"` + `file.read /etc/frr/daemons` | running list, enabled flags, package present |
+
+The config editor's `frr` domain reads and writes `/etc/frr/frr.conf` directly
+(`file.read`/`file.write`, standard base64 form). There is **no UCI package and
+no procd service** for FRR on OpenWrt — `ubus call service list {"name":"frr"}`
+answers `{}` — so apply = write `frr.conf.bak` + write `frr.conf` + restart via
+`/bin/sh -c '/etc/init.d/frr restart > /tmp/frr-restart.log 2>&1'` (direct
+`file.exec` of the init script times out: the daemons hold the pipe open).
+
+ACL: `file` read `exec` on `/usr/bin/vtysh`, `/sbin/ip`, `/usr/libexec/ip-tiny`;
+write `write` on `/etc/frr/**` and `exec` on `/etc/init.d/frr`.
+
 ## Custom app surface (the plugin contract)
 
 Each custom LuCI app exposes its data one of two ways; the client plugin

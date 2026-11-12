@@ -26,4 +26,6 @@ ssh "${SSHOPTS[@]}" root@127.0.0.1 \
      ubus call file exec "{\"command\":\"/bin/sh\",\"params\":[\"-c\",\"true\"]}" >/dev/null &&
      ubus call file read "{\"path\":\"/proc/net/nf_conntrack\"}" >/dev/null &&
      ubus call rpc-sys upgrade_test >/dev/null &&
-     echo "rpcd ACL group router-console installed: uci, exec (ping/tc/sh), nf_conntrack and rpc-sys allowed"'
+     ubus call file exec "{\"command\":\"/usr/bin/vtysh\",\"params\":[\"-c\",\"show daemons\"]}" >/dev/null &&
+     ubus call file read "{\"path\":\"/etc/frr/daemons\"}" >/dev/null &&
+     echo "rpcd ACL group router-console installed: uci, exec (ping/tc/sh/vtysh), nf_conntrack, frr config and rpc-sys allowed"'
