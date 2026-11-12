@@ -2,9 +2,11 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// rist2rist has no rpcd object of its own: its live state is procd's view of
-// the daemon (service.list) and its configuration is the `rist2rist` UCI
-// package. Both are read through this plugin's manifest, not through client code.
+// rist2rist's own LuCI page reads procd's view of the daemon (service.list) and
+// the `rist2rist` UCI package for its settings — the app also ships an rpcd
+// object (status/get_config/wan_status/claim/...), but every read method on it
+// demands the bridge's pair token, a per-bridge secret that does not belong in a
+// plugin manifest. So this view binds the two surfaces the page itself uses.
 Item {
     id: view
 
@@ -113,13 +115,14 @@ Item {
             Label { text: qsTr("Reorder"); color: "#8c8c8c" }
             Label { text: (view.main.reorder_buffer || "—") + " ms"; color: "#e8e8e8" }
 
-            Label { text: qsTr("Telemetry"); color: "#8c8c8c" }
+            Label { text: qsTr("Config authority"); color: "#8c8c8c" }
             Label {
                 Layout.columnSpan: 3
-                text: view.main.telemetry_enabled === "1"
-                      ? (view.main.telemetry_target || qsTr("enabled, no target"))
-                      : qsTr("off")
-                color: view.main.telemetry_enabled === "1" ? "#4b9fe8" : "#8c8c8c"
+                text: view.main.managed === "1"
+                      ? qsTr("managed (claimed)")
+                      : (view.main.api_port ? qsTr("unclaimed · control API %1").arg(view.main.api_port)
+                                            : qsTr("unclaimed"))
+                color: view.main.managed === "1" ? "#4b9fe8" : "#8c8c8c"
             }
         }
 

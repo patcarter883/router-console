@@ -40,18 +40,6 @@ Item {
     readonly property bool running: instances.length > 0
     readonly property bool enabled: status.enabled === true || status.enabled === "true"
 
-    function durationText(seconds) {
-        var total = parseInt(seconds, 10)
-        if (isNaN(total) || total <= 0)
-            return "—"
-        var days = Math.floor(total / 86400)
-        var hours = Math.floor((total % 86400) / 3600)
-        var minutes = Math.floor((total % 3600) / 60)
-        if (days > 0) return days + " d " + hours + " h"
-        if (hours > 0) return hours + " h " + minutes + " min"
-        return minutes + " min"
-    }
-
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 12
@@ -111,11 +99,13 @@ Item {
                 font.bold: true
             }
 
-            Label { text: qsTr("Uptime"); color: "#8c8c8c" }
-            Label { text: view.durationText(status.uptime); color: "#e8e8e8" }
-            Label { text: qsTr("Clients locked"); color: "#8c8c8c" }
+            // The app exposes no start time and no client counter, so neither is
+            // shown: the pid (procd's, cross-checked by the data test) is the
+            // only per-instance figure it actually provides.
+            Label { text: qsTr("Instance"); color: "#8c8c8c" }
             Label {
-                text: status.clients !== undefined ? status.clients : "—"
+                Layout.columnSpan: 3
+                text: status.pid ? qsTr("pid %1").arg(status.pid) : "—"
                 color: "#e8e8e8"
             }
         }

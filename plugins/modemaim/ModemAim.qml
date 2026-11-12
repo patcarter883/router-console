@@ -188,16 +188,18 @@ Item {
         }
 
         ListView {
+            id: siteList
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
             spacing: 2
             model: view.nearest
 
+            // ListView.view is only bound inside a delegate; the header needs the
+            // view itself, or the header component fails to build and takes the
+            // whole view with it.
             header: RowLayout {
-                width: ListView.view.width
-                leftPadding: 6
-                rightPadding: 6
+                width: siteList.width
                 spacing: 12
                 Label { Layout.preferredWidth: 110; text: qsTr("distance"); color: "#6f6f6f"; font.pixelSize: 11 }
                 Label { Layout.preferredWidth: 90; text: qsTr("bearing"); color: "#6f6f6f"; font.pixelSize: 11 }
