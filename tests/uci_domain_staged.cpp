@@ -418,6 +418,19 @@ int main(int argc, char *argv[])
                 return fail(id, "empty", QStringLiteral("staging on an empty domain produced %1 change(s)")
                                           .arg(editor->pendingCount()));
             }
+            // Revert on an absent package is a local no-op, not a uci error.
+            bool reverted = false;
+            auto revertedConn = QObject::connect(editor, &ConfigEditor::reverted, editor,
+                                                [&reverted] { reverted = true; });
+            editor->revert();
+            if (!waitFor([&] { return reverted; }, 5000) || !editor->errorText().isEmpty()) {
+                probe.stop();
+                return fail(id, "revert", editor->errorText().isEmpty()
+                                              ? QStringLiteral("no reverted signal")
+                                              : editor->errorText());
+            }
+            QObject::disconnect(revertedConn);
+            out << "    revert on the absent package: local no-op, no router error" << Qt::endl;
             out << "    PASS " << id << ": domain present, package absent on this router, "
                 << "nothing faked" << Qt::endl;
             continue;

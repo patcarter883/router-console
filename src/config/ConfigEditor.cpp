@@ -117,6 +117,14 @@ void ConfigEditor::revert()
     if (!m_client)
         return;
     setError({});
+    if (m_absent) {
+        // No package on this router: nothing is staged on either side.
+        m_staged.clear();
+        rebuildPending();
+        emit pendingChanged();
+        emit reverted();
+        return;
+    }
     setBusy(true, QStringLiteral("reverting…"));
     QMetaObject::invokeMethod(m_client, "uciRevert", Qt::QueuedConnection,
                               Q_ARG(QString, m_spec.config));
