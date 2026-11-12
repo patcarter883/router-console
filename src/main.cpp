@@ -29,8 +29,12 @@ int main(int argc, char *argv[])
                                           "domain");
     const QCommandLineOption stageOption("stage", "stage option=value in the opened config editor",
                                          "option=value");
+    const QCommandLineOption toolOption("open-tool",
+                                        "open this tool window on connect (ping, traceroute, "
+                                        "portscan, torch, files, sqm)",
+                                        "id");
     parser.addOptions({hostOption, userOption, passwordOption, trustOption, interfaceOption,
-                       configOption, stageOption});
+                       configOption, stageOption, toolOption});
     parser.process(app);
 
     auto *engine = new AppEngine(&app);
@@ -47,6 +51,7 @@ int main(int argc, char *argv[])
     qml.rootContext()->setContextProperty("startupInterfaceName", parser.value(interfaceOption));
     qml.rootContext()->setContextProperty("startupConfigDomain", parser.value(configOption));
     qml.rootContext()->setContextProperty("startupStageValue", parser.value(stageOption));
+    qml.rootContext()->setContextProperty("startupToolId", parser.value(toolOption));
     qml.loadFromModule("RouterConsole", "Main");
     if (qml.rootObjects().isEmpty())
         return 1;

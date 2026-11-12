@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Install the client's rpcd ACL group on the dev VM. The stock LuCI groups do not
-# grant `uci revert` (see docs/ubus-rpcd-read-surface.md), so the config editor
-# needs this group to discard staged changes. Idempotent.
+# grant `uci revert` nor the tool exec commands (see
+# docs/ubus-rpcd-read-surface.md), so the config editor and the tool windows need
+# this group. Idempotent.
 #
 #   SSHP=10022 scripts/vm-rpcd-acl.sh
 set -euo pipefail
@@ -20,4 +21,9 @@ sleep 2
 ssh "${SSHOPTS[@]}" root@127.0.0.1 \
     'ubus call uci get "{\"config\":\"sqm\",\"type\":\"queue\"}" >/dev/null &&
      ubus call uci revert "{\"config\":\"sqm\"}" >/dev/null &&
-     echo "rpcd ACL group router-console installed: uci get + revert allowed"'
+     ubus call file exec "{\"command\":\"/bin/ping\",\"params\":[\"-c\",\"1\",\"127.0.0.1\"]}" >/dev/null &&
+     ubus call file exec "{\"command\":\"/sbin/tc\",\"params\":[\"-s\",\"qdisc\"]}" >/dev/null &&
+     ubus call file exec "{\"command\":\"/bin/sh\",\"params\":[\"-c\",\"true\"]}" >/dev/null &&
+     ubus call file read "{\"path\":\"/proc/net/nf_conntrack\"}" >/dev/null &&
+     ubus call rpc-sys upgrade_test >/dev/null &&
+     echo "rpcd ACL group router-console installed: uci, exec (ping/tc/sh), nf_conntrack and rpc-sys allowed"'

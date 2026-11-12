@@ -13,8 +13,15 @@ add_library(router-console-core STATIC
     config/DomainRegistry.cpp
     DiscoveredHostsModel.cpp
     protocol/MdnsDiscovery.cpp
+    protocol/ToolCodec.cpp
     protocol/UbusClient.cpp
     protocol/UciCodec.cpp
+    tools/FilesTool.cpp
+    tools/PingTool.cpp
+    tools/PortScanTool.cpp
+    tools/SqmStatsTool.cpp
+    tools/TorchModel.cpp
+    tools/TracerouteTool.cpp
 )
 
 target_include_directories(router-console-core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -29,9 +36,15 @@ qt_add_qml_module(router-console
     VERSION 1.0
     QML_FILES
         qml/ConfigWindow.qml
+        qml/FilesWindow.qml
         qml/InterfaceWindow.qml
         qml/Main.qml
         qml/Connect.qml
+        qml/PingWindow.qml
+        qml/PortScanWindow.qml
+        qml/SqmStatsWindow.qml
+        qml/TorchWindow.qml
+        qml/TracerouteWindow.qml
         qml/TrafficGraph.qml
 )
 

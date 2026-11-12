@@ -9,6 +9,7 @@
 
 #include <functional>
 
+#include "ToolTypes.h"
 #include "UbusTypes.h"
 
 class QNetworkAccessManager;
@@ -51,6 +52,23 @@ public slots:
     void uciRevert(const QString &config);
     void systemReboot();
 
+    // Tool tier: rpcd file.exec / file.* / rpc-sys, and the two read surfaces
+    // that have no ubus object of their own (/proc/net/nf_conntrack, tc).
+    void ping(const QString &target, int count);
+    void traceroute(const QString &target, int maxHops);
+    void portScan(const QString &target, const QList<int> &ports);
+    void fetchQdiscs();
+    void fetchConntrack();
+    void fetchLocalAddresses();
+    void fileList(const QString &path);
+    void fileRead(const QString &path);
+    void fileWrite(const QString &path, const QByteArray &data);
+    void fileRemove(const QString &path);
+    void sysupgradeTest();
+    void sysupgradeStart();
+    void packageInstall(const QStringList &packages);
+
+
 signals:
     void loggedIn(const Ubus::Session &session);
     void loginFailed(const Ubus::Error &error);
@@ -78,6 +96,32 @@ signals:
     void uciRevertFailed(const Ubus::Error &error);
     void rebootRequested();
     void rebootFailed(const Ubus::Error &error);
+
+    void pingFinished(const Ubus::PingReport &report);
+    void pingFailed(const Ubus::Error &error);
+    void tracerouteFinished(const Ubus::TracerouteReport &report);
+    void tracerouteFailed(const Ubus::Error &error);
+    void portScanFinished(const Ubus::PortScanReport &report);
+    void portScanFailed(const Ubus::Error &error);
+    void qdiscsReceived(const QList<Ubus::QdiscStats> &qdiscs);
+    void qdiscsFailed(const Ubus::Error &error);
+    void conntrackReceived(const QList<Ubus::ConntrackFlow> &flows);
+    void conntrackFailed(const Ubus::Error &error);
+    void localAddressesReceived(const QStringList &addresses);
+    void fileListingReceived(const Ubus::FileListing &listing);
+    void fileListingFailed(const Ubus::Error &error);
+    void fileReadFinished(const QString &path, const QByteArray &data);
+    void fileReadFailed(const Ubus::Error &error);
+    void fileWriteFinished(const QString &path, int bytes);
+    void fileWriteFailed(const Ubus::Error &error);
+    void fileRemoveFinished(const QString &path);
+    void fileRemoveFailed(const Ubus::Error &error);
+    void sysupgradeChecked(const Ubus::SysupgradeCheck &check);
+    void sysupgradeCheckFailed(const Ubus::Error &error);
+    void sysupgradeStarted();
+    void sysupgradeStartFailed(const Ubus::Error &error);
+    void packageInstallFinished(const Ubus::ExecResult &result);
+    void packageInstallFailed(const Ubus::Error &error);
 
 private:
     using ResultHandler = std::function<void(const QJsonObject &result, const Ubus::Error &error)>;
