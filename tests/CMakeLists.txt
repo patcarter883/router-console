@@ -226,10 +226,10 @@ add_executable(routing-views routing_views.cpp)
 target_link_libraries(routing-views PRIVATE router-console-core)
 
 foreach(mode routes ospf bgp config)
-    # Host/user come from vm_fixture defaults, overridable with RC_VM_HOST /
-    # RC_VM_USER / RC_VM_PASS so one lab copy can be tested on another port.
+    # Host comes from the configure-time RC_TEST_HOST (a private VM copy on other
+    # forwards); user/password stay on the vm_fixture defaults.
     add_test(NAME routing-${mode}
-             COMMAND routing-views --mode ${mode} --accept-new-cert)
+             COMMAND routing-views --mode ${mode} --host ${RC_TEST_HOST} --accept-new-cert)
     set_tests_properties(routing-${mode} PROPERTIES SKIP_RETURN_CODE 3 TIMEOUT 180)
 endforeach()
 
