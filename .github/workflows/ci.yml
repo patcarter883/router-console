@@ -26,7 +26,7 @@ jobs:
           - name: windows-msvc
             os: windows-latest
             qt_arch: win64_msvc2022_64
-            generator: Visual Studio 17 2022
+            generator: Ninja
             artifact: router-console-windows-x86_64
 
     steps:
@@ -38,6 +38,20 @@ jobs:
           version: ${{ env.QT_VERSION }}
           arch: ${{ matrix.qt_arch }}
           cache: true
+
+      - name: MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Toolchain probe
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem 'C:\Program Files\Microsoft Visual Studio' -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty Name
+          cl 2>&1 | Select-Object -First 1
 
       - name: Linux build dependencies
         if: runner.os == 'Linux'
@@ -64,10 +78,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $exe = Get-ChildItem -Path build -Recurse -Filter router-console.exe |
+            Select-Object -First 1
           New-Item -ItemType Directory dist | Out-Null
-          Copy-Item build\src\Release\router-console.exe dist\
+          Copy-Item $exe.FullName dist\
           & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --release --no-translations `
-            --qmldir src\qml dist\router-console.exe
+            --qmldir src\qml (Join-Path $PWD 'dist\router-console.exe')
           Compress-Archive -Path dist\* -DestinationPath "${{ matrix.artifact }}.zip"
 
       - name: Collect Linux binary
