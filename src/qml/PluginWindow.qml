@@ -5,25 +5,23 @@ import RouterConsole
 // Hosts one plugin's QML, loaded from its own file under plugins/<id>/ — the
 // view is not part of this application's QML module, so a new plugin needs no
 // core file. The plugin view gets the session as its `plugin` property.
-Window {
+Rectangle {
     id: win
 
     property string pluginId: ""
     property QtObject session: null
 
-    width: 760
-    height: 560
-    minimumWidth: 560
-    minimumHeight: 360
-    title: session ? session.title : pluginId
+    implicitWidth: 760
+    implicitHeight: 560
+    property int minimumWidth: 560
+    property int minimumHeight: 360
+    property string windowTitle: session ? session.title : pluginId
     color: "#1e1e1e"
-    visible: true
 
     Component.onCompleted: session = AppEngine.openPlugin(pluginId)
 
     // Polling stops with the window; reopening resumes from the engine's cache.
-    onClosing: if (session)
-                   session.stop()
+    function releaseResources() { if (session) session.stop() }
 
     Loader {
         id: viewLoader

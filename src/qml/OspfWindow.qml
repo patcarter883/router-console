@@ -7,16 +7,15 @@ import RouterConsole
 
 // OSPF window: neighbors with their adjacency state, the interfaces OSPF runs
 // on (cost, DR state) and the LSA database summary per area.
-Window {
+Rectangle {
     id: win
 
-    width: 940
-    height: 640
-    minimumWidth: 620
-    minimumHeight: 380
-    title: qsTr("OSPF")
+    implicitWidth: 940
+    implicitHeight: 640
+    property int minimumWidth: 620
+    property int minimumHeight: 380
+    property string windowTitle: qsTr("OSPF")
     color: "#1e1e1e"
-    visible: true
     property string viewId: ""
 
     readonly property var tool: AppEngine.ospfTool

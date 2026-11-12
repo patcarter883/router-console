@@ -5,8 +5,11 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQuickWindow>
 
 #include "AppEngine.h"
+#include "ui/MdiGeometry.h"
+#include "ui/MdiRaiseFilter.h"
 
 int main(int argc, char *argv[])
 {
@@ -40,14 +43,17 @@ int main(int argc, char *argv[])
     const QCommandLineOption pluginOption("open-plugin",
                                           "open the plugin view for this plugin id on connect",
                                           "id");
-    parser.addOptions({hostOption, userOption, passwordOption, trustOption, interfaceOption,
-                       configOption, configSectionOption, stageOption, pluginOption, routingOption});
     const QCommandLineOption toolOption("open-tool",
                                         "open this tool window on connect (ping, traceroute, "
-                                        "portscan, torch, files, sqm)",
+                                        "portscan, torch, files, sqm, terminal, log, leases, "
+                                        "backup); repeatable",
                                         "id");
+    const QCommandLineOption layoutOption("mdi-layout",
+                                          "arrange the opened windows on connect (tile, cascade)",
+                                          "layout");
     parser.addOptions({hostOption, userOption, passwordOption, trustOption, interfaceOption,
-                       configOption, stageOption, toolOption});
+                       configOption, configSectionOption, stageOption, pluginOption, routingOption,
+                       toolOption, layoutOption});
     parser.process(app);
 
     auto *engine = new AppEngine(&app);
@@ -59,19 +65,27 @@ int main(int argc, char *argv[])
     }
 
     qmlRegisterSingletonInstance("RouterConsole", 1, 0, "AppEngine", engine);
+    auto *geometry = new MdiGeometryStore(&app);
+    qmlRegisterSingletonInstance("RouterConsole", 1, 0, "MdiGeometry", geometry);
 
     QQmlApplicationEngine qml;
-    qml.rootContext()->setContextProperty("startupInterfaceName", parser.value(interfaceOption));
-    qml.rootContext()->setContextProperty("startupConfigDomain", parser.value(configOption));
+    qml.rootContext()->setContextProperty("startupInterfaces", parser.values(interfaceOption));
+    qml.rootContext()->setContextProperty("startupConfigDomains", parser.values(configOption));
     qml.rootContext()->setContextProperty("startupConfigSection",
                                           parser.value(configSectionOption));
     qml.rootContext()->setContextProperty("startupStageValue", parser.value(stageOption));
-    qml.rootContext()->setContextProperty("startupPluginId", parser.value(pluginOption));
-    qml.rootContext()->setContextProperty("startupToolId", parser.value(toolOption));
-    qml.rootContext()->setContextProperty("startupRoutingId", parser.value(routingOption));
+    qml.rootContext()->setContextProperty("startupPlugins", parser.values(pluginOption));
+    qml.rootContext()->setContextProperty("startupTools", parser.values(toolOption));
+    qml.rootContext()->setContextProperty("startupRoutingIds", parser.values(routingOption));
+    qml.rootContext()->setContextProperty("startupMdiLayout", parser.value(layoutOption));
     qml.loadFromModule("RouterConsole", "Main");
     if (qml.rootObjects().isEmpty())
         return 1;
+
+    // Click-to-front for the MDI frames; the filter only raises, never consumes.
+    auto *raiseFilter = new MdiRaiseFilter(qobject_cast<QQuickWindow *>(qml.rootObjects().first()),
+                                           &app);
+    Q_UNUSED(raiseFilter);
 
     if (parser.isSet(hostOption)) {
         QMetaObject::invokeMethod(

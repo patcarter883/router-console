@@ -9,7 +9,7 @@ import RouterConsole
 // One config domain window: sections on the left, the domain's fields on the
 // right, and the staged-changes list with Apply / Revert at the bottom. Every
 // edit is local until Apply; the router is only touched by the editor.
-Window {
+Rectangle {
     id: win
 
     property string domainId: ""
@@ -21,13 +21,12 @@ Window {
     property string stageAfterLoad: ""
     property bool stageApplied: false
 
-    width: 920
-    height: 800
-    minimumWidth: 700
-    minimumHeight: 460
-    title: win.editor ? qsTr("Config — %1").arg(win.editor.title) : qsTr("Config")
+    implicitWidth: 920
+    implicitHeight: 800
+    property int minimumWidth: 700
+    property int minimumHeight: 460
+    property string windowTitle: win.editor ? qsTr("Config — %1").arg(win.editor.title) : qsTr("Config")
     color: "#1e1e1e"
-    visible: true
 
     Component.onCompleted: {
         win.editor = AppEngine.configEditor(win.domainId)
@@ -37,7 +36,7 @@ Window {
 
     // The engine owns the editor (one per domain), so closing the window only
     // drops this window's reference.
-    onClosing: win.editor = null
+    function releaseResources() { win.editor = null }
 
     Connections {
         target: win.editor

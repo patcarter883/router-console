@@ -6,16 +6,15 @@ import QtQuick.Layouts
 import RouterConsole
 
 // Port scan tool window: the router probes each port, one second of grace each.
-Window {
+Rectangle {
     id: win
 
-    width: 520
-    height: 460
-    minimumWidth: 380
-    minimumHeight: 280
-    title: qsTr("Port Scan")
+    implicitWidth: 520
+    implicitHeight: 460
+    property int minimumWidth: 380
+    property int minimumHeight: 280
+    property string windowTitle: qsTr("Port Scan")
     color: "#1e1e1e"
-    visible: true
     property string toolId: ""
 
     readonly property var tool: AppEngine.portScanTool

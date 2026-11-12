@@ -7,16 +7,15 @@ import RouterConsole
 
 // Files window: browse the router's filesystem, edit a text file, move bytes in
 // and out, and stage/verify a sysupgrade image or install packages.
-Window {
+Rectangle {
     id: win
 
-    width: 900
-    height: 620
-    minimumWidth: 640
-    minimumHeight: 420
-    title: qsTr("Files")
+    implicitWidth: 900
+    implicitHeight: 620
+    property int minimumWidth: 640
+    property int minimumHeight: 420
+    property string windowTitle: qsTr("Files")
     color: "#1e1e1e"
-    visible: true
     property string toolId: ""
 
     readonly property var tool: AppEngine.filesTool

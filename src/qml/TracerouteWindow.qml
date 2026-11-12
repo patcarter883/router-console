@@ -6,16 +6,15 @@ import QtQuick.Layouts
 import RouterConsole
 
 // Traceroute tool window: hops as the router's own traceroute reported them.
-Window {
+Rectangle {
     id: win
 
-    width: 640
-    height: 440
-    minimumWidth: 440
-    minimumHeight: 280
-    title: qsTr("Traceroute")
+    implicitWidth: 640
+    implicitHeight: 440
+    property int minimumWidth: 440
+    property int minimumHeight: 280
+    property string windowTitle: qsTr("Traceroute")
     color: "#1e1e1e"
-    visible: true
     property string toolId: ""
 
     readonly property var tool: AppEngine.tracerouteTool

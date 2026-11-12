@@ -7,16 +7,15 @@ import RouterConsole
 
 // Torch window: per-host live bandwidth from conntrack deltas. Each row is a
 // remote peer the router is talking to right now, newest load first.
-Window {
+Rectangle {
     id: win
 
-    width: 760
-    height: 520
-    minimumWidth: 520
-    minimumHeight: 320
-    title: qsTr("Torch")
+    implicitWidth: 760
+    implicitHeight: 520
+    property int minimumWidth: 520
+    property int minimumHeight: 320
+    property string windowTitle: qsTr("Torch")
     color: "#1e1e1e"
-    visible: true
     property string toolId: ""
 
     readonly property var torch: AppEngine.torchModel

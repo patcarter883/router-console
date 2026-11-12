@@ -35,6 +35,7 @@ add_library(router-console-core STATIC
     tools/TerminalTool.cpp
     tools/TorchModel.cpp
     tools/TracerouteTool.cpp
+    ui/MdiGeometry.cpp
 )
 
 target_include_directories(router-console-core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -47,6 +48,7 @@ target_compile_definitions(router-console-core PRIVATE
 
 qt_add_executable(router-console
     main.cpp
+    ui/MdiRaiseFilter.cpp
 )
 
 qt_add_qml_module(router-console
@@ -63,6 +65,7 @@ qt_add_qml_module(router-console
         qml/RoutesWindow.qml
         qml/OspfWindow.qml
         qml/BgpWindow.qml
+        qml/MdiWindowFrame.qml
         qml/Main.qml
         qml/Connect.qml
         qml/PluginWindow.qml
