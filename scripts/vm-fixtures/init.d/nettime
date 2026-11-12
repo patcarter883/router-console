@@ -1,0 +1,12 @@
+#!/bin/sh /etc/rc.common
+# Stand-in for nettime's init script on the dev VM: registers the service
+# under its real name so the client's service.list read has the real shape.
+START=95
+USE_PROCD=1
+
+start_service() {
+	procd_open_instance
+	procd_set_param command /bin/sleep 86400
+	procd_set_param respawn
+	procd_close_instance
+}

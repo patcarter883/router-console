@@ -17,16 +17,21 @@ ApplicationWindow {
     // config domain).
     property bool interfacesExpanded: true
     property bool configExpanded: true
+    property bool pluginsExpanded: true
     property bool startupWindowOpened: false
     property bool startupConfigOpened: false
+    property bool startupPluginOpened: false
     property var interfaceWindows: []
     property var configWindows: []
+    property var pluginWindows: []
     readonly property string startupInterface:
         typeof startupInterfaceName === "undefined" ? "" : startupInterfaceName
     readonly property string startupConfig:
         typeof startupConfigDomain === "undefined" ? "" : startupConfigDomain
     readonly property string startupStage:
         typeof startupStageValue === "undefined" ? "" : startupStageValue
+    readonly property string startupPlugin:
+        typeof startupPluginId === "undefined" ? "" : startupPluginId
 
     function openConfig(domainId) {
         for (let i = 0; i < configWindows.length; ++i) {
@@ -73,6 +78,34 @@ ApplicationWindow {
     function closeInterfaceWindows() {
         while (interfaceWindows.length > 0)
             interfaceWindows.pop().close()
+    }
+
+    function openPlugin(pluginId) {
+        for (let i = 0; i < pluginWindows.length; ++i) {
+            if (pluginWindows[i].pluginId === pluginId) {
+                pluginWindows[i].requestActivate()
+                return
+            }
+        }
+        const window = pluginWindowComponent.createObject(root, { pluginId: pluginId })
+        if (!window)
+            return
+        pluginWindows.push(window)
+        window.closing.connect(function () {
+            const index = root.pluginWindows.indexOf(window)
+            if (index >= 0)
+                root.pluginWindows.splice(index, 1)
+        })
+    }
+
+    function closePluginWindows() {
+        while (pluginWindows.length > 0)
+            pluginWindows.pop().close()
+    }
+
+    Component {
+        id: pluginWindowComponent
+        PluginWindow {}
     }
 
     Component {
@@ -269,7 +302,7 @@ ApplicationWindow {
                 }
 
                 Repeater {
-                    model: [qsTr("Tools"), qsTr("Plugins")]
+                    model: [qsTr("Tools")]
                     delegate: Text {
                         required property string modelData
                         Layout.fillWidth: true
@@ -278,6 +311,78 @@ ApplicationWindow {
                         text: modelData
                         color: "#6f6f6f"
                         font.pixelSize: 13
+                    }
+                }
+
+                // Plugin entries come from plugins/*/plugin.json; a rejected
+                // manifest is shown with its error instead of disappearing.
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 30
+                    color: pluginHeaderHover.containsMouse ? "#333333" : "transparent"
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 8
+                        text: (root.pluginsExpanded ? "\u25be  " : "\u25b8  ") + qsTr("Plugins")
+                              + " (" + AppEngine.plugins.count + ")"
+                        color: "#e8e8e8"
+                        font.bold: true
+                        font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                        id: pluginHeaderHover
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: root.pluginsExpanded = !root.pluginsExpanded
+                    }
+                }
+
+                Column {
+                    id: pluginList
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 18
+                    visible: root.pluginsExpanded
+                    spacing: 0
+
+                    Repeater {
+                        model: AppEngine.plugins
+
+                        delegate: Rectangle {
+                            id: pluginRow
+                            required property string pluginId
+                            required property string title
+                            required property bool available
+                            required property string error
+
+                            width: pluginList.width
+                            height: 30
+                            color: pluginRowHover.containsMouse ? "#333333" : "transparent"
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.left: parent.left
+                                anchors.leftMargin: 10
+                                width: parent.width - 20
+                                text: pluginRow.available ? pluginRow.title
+                                                          : pluginRow.title + " — " + pluginRow.error
+                                color: pluginRow.available
+                                       ? (AppEngine.connected ? "#e8e8e8" : "#7a7a7a")
+                                       : "#d97070"
+                                font.pixelSize: 13
+                                elide: Text.ElideRight
+                            }
+
+                            MouseArea {
+                                id: pluginRowHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                enabled: pluginRow.available
+                                onClicked: root.openPlugin(pluginRow.pluginId)
+                            }
+                        }
                     }
                 }
 
@@ -363,12 +468,17 @@ ApplicationWindow {
             if (!AppEngine.connected) {
                 root.closeInterfaceWindows()
                 root.closeConfigWindows()
+                root.closePluginWindows()
                 return
             }
             connectDialog.close()
             if (root.startupInterface.length > 0 && !root.startupWindowOpened) {
                 root.startupWindowOpened = true
                 root.openInterface(root.startupInterface)
+            }
+            if (root.startupPlugin.length > 0 && !root.startupPluginOpened) {
+                root.startupPluginOpened = true
+                root.openPlugin(root.startupPlugin)
             }
             if (root.startupConfig.length > 0 && !root.startupConfigOpened) {
                 root.startupConfigOpened = true

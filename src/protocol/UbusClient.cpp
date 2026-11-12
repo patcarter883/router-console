@@ -406,6 +406,18 @@ void UbusClient::systemReboot()
          });
 }
 
+void UbusClient::callApp(const QString &key, const QString &object, const QString &method,
+                         const QJsonObject &args)
+{
+    call(object, method, args, [this, key](const QJsonObject &result, const Ubus::Error &error) {
+        if (!error.isOk()) {
+            emit appCallFailed(key, error);
+            return;
+        }
+        emit appCallSucceeded(key, result);
+    });
+}
+
 void UbusClient::closeSession()
 {
     m_session = {};

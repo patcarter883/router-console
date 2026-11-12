@@ -1,0 +1,28 @@
+{
+  "id": "modemaim",
+  "title": "Cellular Aim",
+  "order": 61,
+  "interval": 3000,
+  "view": "ModemAim.qml",
+  "sources": [
+    {
+      "id": "status",
+      "transport": "ubus",
+      "object": "modemaim",
+      "method": "status"
+    },
+    {
+      "id": "origin",
+      "transport": "ubus",
+      "object": "modemaim",
+      "method": "origin",
+      "interval": 30000
+    },
+    {
+      "id": "towers",
+      "transport": "http",
+      "path": "/luci-static/resources/modemaim/towers.json",
+      "interval": 60000
+    }
+  ]
+}

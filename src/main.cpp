@@ -32,8 +32,11 @@ int main(int argc, char *argv[])
                                           "domain");
     const QCommandLineOption stageOption("stage", "stage option=value in the opened config editor",
                                          "option=value");
+    const QCommandLineOption pluginOption("open-plugin",
+                                          "open the plugin view for this plugin id on connect",
+                                          "id");
     parser.addOptions({hostOption, userOption, passwordOption, trustOption, interfaceOption,
-                       configOption, stageOption});
+                       configOption, stageOption, pluginOption});
     parser.process(app);
 
     auto *engine = new AppEngine(&app);
@@ -50,6 +53,7 @@ int main(int argc, char *argv[])
     qml.rootContext()->setContextProperty("startupInterfaceName", parser.value(interfaceOption));
     qml.rootContext()->setContextProperty("startupConfigDomain", parser.value(configOption));
     qml.rootContext()->setContextProperty("startupStageValue", parser.value(stageOption));
+    qml.rootContext()->setContextProperty("startupPluginId", parser.value(pluginOption));
     qml.loadFromModule("RouterConsole", "Main");
     if (qml.rootObjects().isEmpty())
         return 1;

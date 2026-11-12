@@ -1,0 +1,23 @@
+{
+  "id": "rist2rist",
+  "title": "RIST Proxy",
+  "order": 60,
+  "interval": 2000,
+  "view": "Rist2Rist.qml",
+  "sources": [
+    {
+      "id": "service",
+      "transport": "ubus",
+      "object": "service",
+      "method": "list",
+      "args": { "name": "rist2rist" }
+    },
+    {
+      "id": "config",
+      "transport": "ubus",
+      "object": "uci",
+      "method": "get",
+      "args": { "config": "rist2rist" }
+    }
+  ]
+}

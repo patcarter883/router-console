@@ -1,0 +1,13 @@
+{
+	"router-console-plugins": {
+		"description": "router-console plugin views: procd service state, custom app rpcd surfaces, and the UCI packages the views read",
+		"read": {
+			"ubus": {
+				"service": [ "list" ],
+				"modemaim": [ "status", "origin", "bearing", "towers" ],
+				"nettime": [ "status" ]
+			},
+			"uci": [ "rist2rist", "modemaim" ]
+		}
+	}
+}

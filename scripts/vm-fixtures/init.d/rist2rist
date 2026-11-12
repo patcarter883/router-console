@@ -1,0 +1,13 @@
+#!/bin/sh /etc/rc.common
+# Stand-in for the rist2rist init script on the dev VM: the package binary is
+# not built here, but procd still has to register the service so the client's
+# service.list read has the real shape to work with.
+START=95
+USE_PROCD=1
+
+start_service() {
+	procd_open_instance
+	procd_set_param command /bin/sleep 86400
+	procd_set_param respawn
+	procd_close_instance
+}

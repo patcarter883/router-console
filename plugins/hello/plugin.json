@@ -1,0 +1,15 @@
+{
+  "id": "hello",
+  "title": "Hello Plugin",
+  "order": 90,
+  "interval": 5000,
+  "view": "Hello.qml",
+  "sources": [
+    {
+      "id": "board",
+      "transport": "ubus",
+      "object": "system",
+      "method": "board"
+    }
+  ]
+}

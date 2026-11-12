@@ -1,0 +1,22 @@
+{
+  "id": "nettime",
+  "title": "Net Time Provider",
+  "order": 62,
+  "interval": 2000,
+  "view": "NetTime.qml",
+  "sources": [
+    {
+      "id": "status",
+      "transport": "ubus",
+      "object": "nettime",
+      "method": "status"
+    },
+    {
+      "id": "service",
+      "transport": "ubus",
+      "object": "service",
+      "method": "list",
+      "args": { "name": "nettime" }
+    }
+  ]
+}

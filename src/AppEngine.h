@@ -18,6 +18,9 @@ class UbusClient;
 class InterfacesModel;
 class ConfigEditor;
 class MdnsDiscovery;
+namespace Plugin {
+class Hub;
+}
 
 // Owns the connection lifecycle and exposes it to QML as plain properties.
 // The ubus client lives in its own thread; every call into it is queued and
@@ -43,6 +46,7 @@ class AppEngine : public QObject
     Q_PROPERTY(int discoveredCount READ discoveredCount NOTIFY discoveredChanged)
     Q_PROPERTY(QString discoveryStatus READ discoveryStatus NOTIFY discoveredChanged)
     Q_PROPERTY(QAbstractItemModel *configDomains READ configDomains CONSTANT)
+    Q_PROPERTY(QAbstractItemModel *plugins READ pluginsModel CONSTANT)
 
 public:
     explicit AppEngine(QObject *parent = nullptr);
@@ -64,6 +68,8 @@ public:
     int discoveredCount() const { return m_discovered.count(); }
     QString discoveryStatus() const { return m_discoveryStatus; }
     QAbstractItemModel *configDomains() { return &m_domains; }
+    QAbstractItemModel *pluginsModel() const;
+    Plugin::Hub *pluginHub() const { return m_plugins; }
 
     Q_INVOKABLE void connectTo(const QString &host, const QString &port, const QString &username,
                                const QString &password);
@@ -72,6 +78,8 @@ public:
     Q_INVOKABLE void disconnectFromRouter();
     // One editor per domain id, created on first open and owned by the engine.
     Q_INVOKABLE QObject *configEditor(const QString &domainId);
+    // One session per plugin id; the QML view of that plugin reads it.
+    Q_INVOKABLE QObject *openPlugin(const QString &pluginId);
     Q_INVOKABLE void rebootRouter();
 
 signals:
@@ -104,6 +112,7 @@ private:
     MdnsDiscovery *m_discovery = nullptr;
     DiscoveredHostsModel m_discovered;
     QString m_discoveryStatus;
+    Plugin::Hub *m_plugins = nullptr;
     State m_state = State::Idle;
     Ubus::BoardInfo m_board;
     QString m_host;
