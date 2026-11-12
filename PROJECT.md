@@ -7,6 +7,27 @@ The finish line lives in the north star `router-console`:
 
     python3 ~/.hermes/skills/software-development/north-star/scripts/north_star.py show router-console
 
+## North star (owner, 2026-11-12)
+
+If this client reaches WinBox parity, the owner wants the web server and UI
+REMOVED from the router: "I don't think these are things that belong on a
+router." The client currently rides on uhttpd's /ubus HTTPS endpoint and LuCI's
+rpcd ACLs. The end state is a headless router: sshd + ubusd + rpcd only, with
+the client speaking ubus over SSH. **DEFERRED (owner, 2026-11-12): the
+headless/uhttpd-removal pass is a separate later effort — do not build the SSH
+transport until it is unblocked.**
+
+## Owner decisions (2026-11-12)
+
+- Single router per instance is intended parity — WinBox is used that way. No
+  multi-router milestone.
+- Routing is a first-class requirement: the app must CONFIGURE and DISPLAY
+  routing for all routing protocols on OpenWrt (FRR: ospfd, bgpd — the fleet
+  runs OSPF or iBGP; detect from the live router, do not assume which).
+- Roadmap order: log viewer + DHCP leases + config backup → routing →
+  terminal → MDI docking → persistent graphs → modemaim map/aim view.
+  Headless pass last, deferred.
+
 ## Scope (settled with Pat, 2026-11-12)
 
 - OpenWrt-only. The MikroTik ax² keeps WinBox; dual-protocol is a later extension.
