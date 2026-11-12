@@ -3,6 +3,7 @@
 
 #include "UbusClient.h"
 
+#include "TerminalCodec.h"
 #include "ToolCodec.h"
 #include "FrrCodec.h"
 #include "UciCodec.h"
@@ -22,6 +23,7 @@
 
 namespace UciCodec = Ubus::UciCodec;
 namespace ToolCodec = Ubus::ToolCodec;
+namespace TerminalCodec = Ubus::TerminalCodec;
 namespace FrrCodec = Ubus::FrrCodec;
 
 namespace {
@@ -158,6 +160,7 @@ UbusClient::UbusClient(QObject *parent)
     qRegisterMetaType<Ubus::FileListing>();
     qRegisterMetaType<Ubus::SysupgradeCheck>();
     qRegisterMetaType<Ubus::ExecResult>();
+    qRegisterMetaType<Ubus::TerminalResult>();
     qRegisterMetaType<Routing::RouteTable>();
     qRegisterMetaType<Routing::Daemons>();
     qRegisterMetaType<Routing::OspfStatus>();
@@ -667,6 +670,35 @@ void UbusClient::packageInstall(const QStringList &packages)
                  return;
              }
              emit packageInstallFinished(ToolCodec::parseExec(QStringLiteral("/usr/bin/apk"), result));
+         });
+}
+
+// rpcd's exec has no tty and answers one command at a time; the frame carries
+// the exit status and the resulting directory back in its stdout marker.
+void UbusClient::terminalExec(const QString &command, const QString &cwd)
+{
+    call(QStringLiteral("file"), QStringLiteral("exec"), TerminalCodec::execArgs(command, cwd),
+         [this, command, cwd](const QJsonObject &result, const Ubus::Error &error) {
+             if (!error.isOk()) {
+                 // Status 8 is rpcd refusing to send the reply: the ubus message
+                 // cap (~1 MB of stdout) was hit before anything came back.
+                 if (error.status == Ubus::Status::NotSupported) {
+                     emit terminalFailed({Ubus::Status::NotSupported,
+                                          QStringLiteral("output exceeded rpcd's reply limit "
+                                                         "(~1 MB); redirect it to a file and "
+                                                         "read that instead")});
+                 } else if (error.status == Ubus::Status::TransportFailure
+                            && error.message.contains(QLatin1String("timed out"))) {
+                     emit terminalFailed({error.status,
+                                          QStringLiteral("no answer within rpcd's 60 s limit — "
+                                                         "a background process is probably still "
+                                                         "holding the command's output")});
+                 } else {
+                     emit terminalFailed(error);
+                 }
+                 return;
+             }
+             emit terminalFinished(TerminalCodec::parse(command, result, cwd));
          });
 }
 

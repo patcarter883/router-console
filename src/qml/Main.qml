@@ -42,6 +42,7 @@ ApplicationWindow {
         { id: "torch", title: qsTr("Torch") },
         { id: "files", title: qsTr("Files") },
         { id: "sqm", title: qsTr("SQM / CAKE stats") },
+        { id: "terminal", title: qsTr("Terminal") },
         { id: "log", title: qsTr("Log") },
         { id: "leases", title: qsTr("DHCP leases") },
         { id: "backup", title: qsTr("Config backup") }
@@ -211,6 +212,7 @@ ApplicationWindow {
         case "torch": return torchWindowComponent
         case "files": return filesWindowComponent
         case "sqm": return sqmStatsWindowComponent
+        case "terminal": return terminalWindowComponent
         case "log": return logWindowComponent
         case "leases": return leasesWindowComponent
         case "backup": return backupWindowComponent
@@ -229,6 +231,7 @@ ApplicationWindow {
     Component { id: torchWindowComponent; TorchWindow {} }
     Component { id: filesWindowComponent; FilesWindow {} }
     Component { id: sqmStatsWindowComponent; SqmStatsWindow {} }
+    Component { id: terminalWindowComponent; TerminalWindow {} }
     Component { id: logWindowComponent; LogWindow {} }
     Component { id: leasesWindowComponent; LeasesWindow {} }
     Component { id: backupWindowComponent; BackupWindow {} }

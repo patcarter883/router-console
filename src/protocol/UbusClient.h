@@ -81,6 +81,9 @@ public slots:
     void sysupgradeTest();
     void sysupgradeStart();
     void packageInstall(const QStringList &packages);
+    // Terminal window: one framed `/bin/sh -c` per command, with the working
+    // directory the window carries between commands (no tty on this surface).
+    void terminalExec(const QString &command, const QString &cwd);
 
     // Daily-driver tier: the syslog tail, the DHCP lease table and the config
     // backup's file/config enumeration.
@@ -155,6 +158,8 @@ signals:
     void sysupgradeStartFailed(const Ubus::Error &error);
     void packageInstallFinished(const Ubus::ExecResult &result);
     void packageInstallFailed(const Ubus::Error &error);
+    void terminalFinished(const Ubus::TerminalResult &result);
+    void terminalFailed(const Ubus::Error &error);
     void logReceived(const QList<Ubus::LogEntry> &entries);
     void logFailed(const Ubus::Error &error);
     void leasesReceived(const QList<Ubus::DhcpLease> &leases);

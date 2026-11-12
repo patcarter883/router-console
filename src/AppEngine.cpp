@@ -17,6 +17,7 @@
 #include "tools/BackupTool.h"
 #include "tools/LeaseTool.h"
 #include "tools/LogTool.h"
+#include "tools/TerminalTool.h"
 #include "tools/PingTool.h"
 #include "tools/PortScanTool.h"
 #include "routing/RoutingTools.h"
@@ -51,6 +52,7 @@ AppEngine::AppEngine(QObject *parent) : QObject(parent)
     m_log = new LogTool(m_client, this);
     m_leases = new LeaseTool(m_client, this);
     m_backup = new BackupTool(m_client, this);
+    m_terminal = new TerminalTool(m_client, this);
     m_client->moveToThread(&m_thread);
     connect(&m_thread, &QThread::finished, m_client, &QObject::deleteLater);
 
@@ -148,6 +150,11 @@ QObject *AppEngine::leaseTool()
 QObject *AppEngine::backupTool()
 {
     return m_backup;
+}
+
+QObject *AppEngine::terminalTool()
+{
+    return m_terminal;
 }
 
 QObject *AppEngine::routesTool()
@@ -305,6 +312,7 @@ void AppEngine::resetTools()
     m_log->reset();
     m_leases->reset();
     m_backup->reset();
+    m_terminal->reset();
     m_routes->reset();
     m_ospf->reset();
     m_bgp->reset();
@@ -350,6 +358,7 @@ void AppEngine::onLoginFailed(const Ubus::Error &error)
 void AppEngine::onBoardReceived(const Ubus::BoardInfo &board)
 {
     m_board = board;
+    m_terminal->setHostname(board.hostname);
     setState(State::Connected);
     m_interfaces->start();
 }
