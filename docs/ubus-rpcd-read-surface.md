@@ -200,12 +200,46 @@ answers immediately and the VM is back in ~20 s.
 
 The client's domain registry (`src/config/DomainRegistry.cpp`) names a package,
 the section type to enumerate and the editable options, read from the router's
-own config. SQM is the first domain: package `sqm`, section type `queue`, one
-section (`config queue 'eth1'` on the VM) with `enabled`, `interface`,
-`download`, `upload`, `qdisc`, `script`, `ingress_ecn`, `egress_ecn`,
-`linklayer`, `use_mq`. The choice lists are the VM's real ones: qdiscs verified
-by sqm on this kernel (`/var/run/sqm/available_qdiscs`: `cake`, `fq_codel`) and
-the QoS scripts in `/usr/lib/sqm/*.qos`.
+own config. Adding a domain is one registry entry: the editor, the tree and the
+staged-changes list are generic over it. Six domains, in registry order:
+
+| id | package | section type | sections on the dev VM | options |
+| --- | --- | --- | --- | --- |
+| sqm | sqm | queue | 1 (`eth1`) | enabled, interface, download, upload, qdisc, script, ingress_ecn, egress_ecn, linklayer, use_mq |
+| system | system | system | 1 (anonymous) | hostname, timezone, zonename, log_size |
+| network | network | interface | 5 (loopback, lan, wan, wan6, lan2) | device, proto, ipaddr, ip6assign |
+| wireless | wireless | wifi-iface | **0 — package absent** | device, mode, ssid, network, encryption, key |
+| firewall | firewall | zone | 2 (cfg02dc81 = lan, cfg03dc81 = wan) | name, input, output, forward, masq, mtu_fix |
+| dhcp | dhcp | dhcp | 2 (lan, wan) | interface, start, limit, leasetime, dhcpv4, dhcpv6, ra, ignore |
+
+Section counts and option names are what the VM actually stores (network,
+firewall and dhcp come straight from `/etc/config/{network,firewall,dhcp}`; the
+SQM choice lists from `/var/run/sqm/available_qdiscs` and `/usr/lib/sqm/*.qos`).
+
+`tests/uci_domain_staged.cpp` enforces that: it reads each package
+independently and fails if the section count differs or if any registry field
+names an option the package does not hold. Options reachable only through a
+different section type stay out of the registry — the network domain edits
+`config interface`, not `config device`, and the firewall domain edits
+`config zone`, not `config rule`.
+
+**Wireless on the dev VM.** There is no `wireless` package and no
+`/etc/config/wireless` on the VM (`ubus call uci configs` does not list it; `uci
+get wireless` answers "Not found"), because the x86 image has no radio and no
+`wpad`/`hostapd`. The domain therefore loads as an **empty** domain: `uci
+get {config:"wireless", type:"wifi-iface"}` answering NOT_FOUND is treated as a
+package the router does not have (`ConfigEditor` sets a loaded, zero-section
+state with the status "no /etc/config/wireless on this router"), not as a read
+failure. The client shows no radio and invents none. The wireless field names
+are the UCI `wifi-iface` schema OpenWrt writes when a radio exists — they are
+the one set in this table not observed on the VM, and the test skips the
+option-presence check for an absent package instead of pretending to verify it.
+
+**List-valued options.** `uci get` answers a repeated option (`list ipaddr`,
+`list network`, `list ra_flags`) as a JSON array, and the decoder keeps scalars
+only, so such a value renders empty in the editor. None of the editable fields
+above is list-only on the VM; `firewall.zone.network` and `dhcp.ra_flags` are
+deliberately not in the registry.
 
 ## Tool tier
 
