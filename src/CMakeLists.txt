@@ -7,6 +7,7 @@ find_package(Qt6 6.4 REQUIRED COMPONENTS Quick QuickControls2 Network)
 
 add_library(router-console-core STATIC
     AppEngine.cpp
+    models/InterfacesModel.cpp
     protocol/UbusClient.cpp
 )
 
@@ -21,8 +22,10 @@ qt_add_qml_module(router-console
     URI RouterConsole
     VERSION 1.0
     QML_FILES
+        qml/InterfaceWindow.qml
         qml/Main.qml
         qml/Connect.qml
+        qml/TrafficGraph.qml
 )
 
 target_link_libraries(router-console PRIVATE

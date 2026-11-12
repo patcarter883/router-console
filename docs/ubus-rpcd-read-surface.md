@@ -37,6 +37,28 @@ with hostname + IP, one click to prefill.
   curated device lists LuCI itself uses; prefer these for tree building.
 - `luci-rpc.getBoardJSON`, `getDSLStatus`, etc. as needed.
 
+Measured against 25.12.6 (`ubus call network.interface dump`, `ubus call
+network.device status`), the two calls a graph row needs:
+
+    interface.dump   -> {"interface": [ {interface, device, l3_device, proto,
+                          up, pending, autostart, dynamic, uptime,
+                          "ipv4-address": [{address, mask}], "ipv6-address": [...]}, ... ]}
+    network.device.status -> { "br-lan": {up, carrier, present, mtu, macaddr,
+                          devtype, type, "statistics": {rx_bytes, tx_bytes,
+                          rx_packets, tx_packets, rx_errors, tx_errors,
+                          rx_dropped, tx_dropped}}, "eth0": {...}, "lo": {...} }
+
+- `network.interface.dump` names interfaces (`lan`, `wan`, `wan6`, `loopback`);
+  the kernel device to read counters from is `l3_device` (br-lan for `lan`,
+  eth1 for `wan`/`wan6`, lo for `loopback`). Device names and interface names
+  are different namespaces — the model accepts either when a caller names a row.
+- `network.device.status` answers with an object keyed by device name, not an
+  array; counters are plain integers and `present` is false for a device that
+  is configured but missing.
+- Counters are cumulative since boot: a rate is `(bytes - previous)/elapsed`,
+  and a counter that goes backwards means the device was recreated (drop that
+  sample instead of reporting a negative rate).
+
 ## Config read/write (all core domains)
 
 - `uci` (ubus object): `get`, `get_all`, `set`, `add`, `delete`, `apply`,

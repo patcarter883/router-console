@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include <QSettings>
 
+#include "models/InterfacesModel.h"
 #include "protocol/UbusClient.h"
 
 AppEngine::AppEngine(QObject *parent) : QObject(parent)
@@ -17,6 +18,7 @@ AppEngine::AppEngine(QObject *parent) : QObject(parent)
     qRegisterMetaType<Ubus::Error>();
 
     m_client = new UbusClient;
+    m_interfaces = new InterfacesModel(m_client, this);
     m_client->moveToThread(&m_thread);
     connect(&m_thread, &QThread::finished, m_client, &QObject::deleteLater);
 
@@ -39,6 +41,11 @@ AppEngine::~AppEngine()
 QString AppEngine::settingsKey() const
 {
     return QStringLiteral("certificates/%1:%2").arg(m_host).arg(m_port);
+}
+
+QAbstractItemModel *AppEngine::interfacesModel() const
+{
+    return m_interfaces;
 }
 
 QString AppEngine::statusText() const
@@ -143,6 +150,7 @@ void AppEngine::disconnectFromRouter()
 {
     UbusClient *client = m_client;
     QMetaObject::invokeMethod(client, &UbusClient::closeSession, Qt::QueuedConnection);
+    m_interfaces->stop();
     m_board = {};
     setState(State::Idle);
 }
@@ -160,6 +168,7 @@ void AppEngine::onLoginFailed(const Ubus::Error &error)
     // it is not a connection failure.
     if (error.status == Ubus::Status::CertificateRequired)
         return;
+    m_interfaces->stop();
     setState(State::Failed, QStringLiteral("login: %1").arg(error.message));
 }
 
@@ -167,10 +176,12 @@ void AppEngine::onBoardReceived(const Ubus::BoardInfo &board)
 {
     m_board = board;
     setState(State::Connected);
+    m_interfaces->start();
 }
 
 void AppEngine::onBoardFailed(const Ubus::Error &error)
 {
+    m_interfaces->stop();
     setState(State::Failed, QStringLiteral("system.board: %1").arg(error.message));
 }
 
